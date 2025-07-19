@@ -1,11 +1,10 @@
 # SGP - Sega Genesis Platform Abstraction Layer
 
-A lightweight, header-only abstraction layer for Sega Genesis development using [SGDK](https://github.com/Stephane-D/SGDK). SGP provides ergonomic, high-performance input handling and camera helpers for Genesis games and demos.
+A lightweight, header-only abstraction layer for Sega Genesis development using [SGDK](https://github.com/Stephane-D/SGDK). SGP provides ergonomic, high-performance input handling and camera helpers for Genesis games and demos. Inspired by [raylib](https://github.com/raysan5/raylib).
 
 ## Features
 
 - **Input Management**: Edge detection for button presses/releases with dual controller support
-- **Camera System**: Fixed-point camera with smooth following, clamping, and transforms
 - **Header-Only**: No compilation required - just include and use
 - **Performance Focused**: Inline functions and efficient state management
 - **SGDK Compatible**: Built specifically for SGDK development workflow
@@ -89,62 +88,28 @@ if (SGP_ButtonDown(JOY_1, BUTTON_LEFT)) {
 }
 ```
 
-### Camera Functions
-
-#### `SGP_CameraInit(SGPCamera* cam, fix16 x, fix16 y)`
-Initializes a camera with default values at the specified position.
-
-```c
-SGPCamera camera;
-SGP_CameraInit(&camera, FIX16(160), FIX16(112));
-```
-
-#### `SGP_CameraSmoothFollow(SGPCamera* cam, fix16 target_x, fix16 target_y, fix16 smooth)`
-Smoothly moves camera toward target position using interpolation.
-
-```c
-// Follow player with 10% smoothing
-SGP_CameraSmoothFollow(&camera, player_x, player_y, FIX16(0.1));
-```
-
-#### `SGP_CameraClamp(SGPCamera* cam, fix16 min_x, fix16 min_y, fix16 max_x, fix16 max_y)`
-Clamps camera position within specified bounds.
-
-```c
-// Keep camera within level boundaries
-SGP_CameraClamp(&camera, FIX16(0), FIX16(0), FIX16(800), FIX16(600));
-```
-
 ## Data Structures
 
 ### SGP
-Global platform state containing input and camera data:
+Global platform state containing input data:
 
 ```c
 typedef struct {
-    u16 joy1_state;        // Current state of joypad 1
-    u16 joy2_state;        // Current state of joypad 2
-    u16 joy1_previous;     // Previous state of joypad 1
-    u16 joy2_previous;     // Previous state of joypad 2
-    fix16 camera_x;        // Camera X position (fixed-point)
-    fix16 camera_y;        // Camera Y position (fixed-point)
-    fix16 camera_zoom;     // Camera zoom (1.0 = default)
-    fix16 camera_rotation; // Camera rotation (radians)
+    u16 joy1_state;      ///< Current state of joypad 1
+    u16 joy2_state;      ///< Current state of joypad 2
+    u16 joy1_previous;   ///< Previous state of joypad 1
+    u16 joy2_previous;   ///< Previous state of joypad 2
+} input;
+
+/**
+ * @brief Platform-wide state for input and camera.
+ *
+ * Holds current and previous joypad states for both controllers,
+ * as well as camera position, zoom, and rotation in fixed-point.
+ */
+typedef struct {
+    input input;         ///< Input state
 } SGP;
-```
-
-### SGPCamera
-Camera structure for advanced camera operations:
-
-```c
-typedef struct {
-    fix16 offset_x;   // Camera offset X
-    fix16 offset_y;   // Camera offset Y
-    fix16 target_x;   // Camera target X
-    fix16 target_y;   // Camera target Y
-    fix16 rotation;   // Camera rotation (radians)
-    fix16 zoom;       // Camera zoom (1.0 = default)
-} SGPCamera;
 ```
 
 ## Usage Examples
@@ -176,44 +141,6 @@ int main() {
         if (SGP_ButtonPressed(JOY_1, BUTTON_A)) {
             // Trigger jump
         }
-        
-        VDP_waitVSync();
-    }
-}
-```
-
-### Camera Following
-
-```c
-#include "sgp.h"
-
-SGP sgp;
-
-int main() {
-    SGP_init();
-    
-    SGPCamera camera;
-    SGP_CameraInit(&camera, FIX16(160), FIX16(112));
-    
-    fix16 player_x = FIX16(160);
-    fix16 player_y = FIX16(112);
-    
-    while(1) {
-        SGP_PollInput();
-        
-        // Update player position
-        if (SGP_ButtonDown(JOY_1, BUTTON_LEFT))  player_x -= FIX16(2);
-        if (SGP_ButtonDown(JOY_1, BUTTON_RIGHT)) player_x += FIX16(2);
-        
-        // Smooth camera follow
-        SGP_CameraSmoothFollow(&camera, player_x, player_y, FIX16(0.05));
-        
-        // Keep camera in bounds
-        SGP_CameraClamp(&camera, FIX16(0), FIX16(0), FIX16(1024), FIX16(512));
-        
-        // Use camera position for scrolling
-        VDP_setHorizontalScroll(PLAN_A, -fix16ToInt(camera.target_x));
-        VDP_setVerticalScroll(PLAN_A, -fix16ToInt(camera.target_y));
         
         VDP_waitVSync();
     }
