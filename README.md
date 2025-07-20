@@ -1,5 +1,4 @@
-# SGP - Sega Genesis Platform Abstraction Layer
-
+# Sega Genesis Platform Abstraction Layer (SGP)
 A lightweight, header-only abstraction layer for Sega Genesis development using [SGDK](https://github.com/Stephane-D/SGDK). SGP provides ergonomic, high-performance input handling and camera helpers for Genesis games and demos. Inspired by [raylib](https://github.com/raysan5/raylib).
 
 ## Features
