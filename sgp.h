@@ -25,7 +25,7 @@
  *
  * Purpose: Header-only platform abstraction layer for Sega Genesis development
  *          using SGDK. Provides ergonomic, high-performance input and camera
- *          helpers for Genesis games and demos.
+ *          helpers for Genesis development.
  */
 #ifndef SGP_H
 #define SGP_H
@@ -33,6 +33,10 @@
 #include <genesis.h>
 
 #define BUTTON_NONE 0x0000
+#define VDP_SPRITE_OFFSET 0x80 // Offset for sprite coordinates in VDP
+
+// Each metatile is 16x16 pixels, so 128x128 pixels block is 8x8 metatiles
+static inline int __inPx(int x) { return x << 7; }
 
 //----------------------------------------------------------------------------------
 // Types and Structures Definition
@@ -48,6 +52,32 @@ typedef struct {
 } input;
 
 /**
+ * @brief Camera state for smooth scrolling and transformations.
+ *
+ * Uses fixed-point math for precision on the Genesis.
+ */
+typedef struct {
+    fix16 offset_x;   ///< Camera offset X
+    fix32 offset_y;   ///< Camera offset Y
+    fix32* target_x;   ///< Camera target X
+    fix32* target_y;   ///< Camera target Y
+    u8 type;          ///< Camera type (e.g. CAMERA_SMOOTH)
+    int current_x;            ///< Camera X position (integer for MAP_scrollTo)
+    int current_y;            ///< Camera Y position (integer for MAP_scrollTo)
+    Sprite* sprite;
+    s16 sprite_width;  ///< Width of the sprite being followed
+    s16 sprite_height; ///< Height of the sprite being followed
+    bool active;
+} SGPCamera;
+
+typedef struct {
+    Map* current;
+    Map* previous;
+    u16 height;
+    u16 width;
+} SGPMap;
+
+/**
  * @brief Platform-wide state for input and camera.
  *
  * Holds current and previous joypad states for both controllers,
@@ -55,16 +85,30 @@ typedef struct {
  */
 typedef struct {
     input input;         ///< Input state
+    SGPCamera camera;    ///< Camera state
+    SGPMap map;          ///< Current map state
 } SGP;
-
-//----------------------------------------------------------------------------------
-// Input Functions
-//----------------------------------------------------------------------------------
 
 /**
  * @brief Global platform state (must be defined in one .c file).
  */
 extern SGP sgp;
+
+static bool showDebug = FALSE;
+static inline void toggleDebug(void) {
+    showDebug = showDebug ? FALSE : TRUE;
+}
+static inline void SGP_DebugPrint(const char* text, int x, int y) {
+    if (showDebug) {
+        VDP_drawText(text, x, y);
+    } else {
+        VDP_clearTextArea(x, y, 32, 8); // Clear the debug text if not showing
+    }
+}
+
+//----------------------------------------------------------------------------------
+// Input Functions
+//----------------------------------------------------------------------------------
 
 /**
  * @brief Polls and updates the current and previous state for both controllers.
@@ -119,11 +163,129 @@ static inline bool SGP_ButtonDown(u16 joy, u16 button) {
 }
 
 //----------------------------------------------------------------------------------
-// Platform Initialization
+// Camera Functions (Fixed Point for Genesis)
 //----------------------------------------------------------------------------------
+typedef struct {
+    Sprite* sprite;  ///< Sprite to follow
+    fix32* target_x_ptr; ///< Target X position (fixed-point)
+    fix32* target_y_ptr; ///< Target Y Position (fixed-point)
+    int sprite_width;  ///< Width of the sprite being followed
+    int sprite_height; ///< Height of the sprite being followed
+} SGPCameraTarget;
 
 /**
- * @brief Initializes default Sega Genesis Platform Abstraction Layer (SGPal) state.
+ * @brief Initializes a Camera struct with default values and a given target position.
+ * @param cam Pointer to Camera struct
+ * @param current_x   Target X position
+ * @param current_y   Target Y position
+ */
+static inline void SGP_CameraInit(const Map* map) {
+    sgp.map.current = map;
+    sgp.map.height = __inPx(map->h);
+    sgp.map.width = __inPx(map->w);
+    sgp.camera.active = TRUE;
+}
+/**
+ * @brief Clamps the given fixed-point position to the map bounds.
+ * @param x Pointer to X position (fixed-point)
+ * @param y Pointer to Y position (fixed-point)
+ * @param width Width of the entity
+ * @param height Height of the entity
+ */
+static inline void SGP_ClampPositionToMapBounds(fix32* x, fix32* y, s16 width, s16 height) {
+    int pos_x = F32_toInt(*x);
+    int pos_y = F32_toInt(*y);
+
+    // Clamp position to map bounds (entity always visible on map, accounting for sprite dimensions)
+    if (pos_x < 0) *x = FIX32(0);
+    if (pos_x > sgp.map.width - 1 - width) *x = FIX32(sgp.map.width - 1 - width);
+    if (pos_y < 0) *y = FIX32(0);
+    if (pos_y > sgp.map.height - height) *y = FIX32(sgp.map.height - height);
+}
+
+/**
+ * @brief Follows a target position with the camera, clamping to map bounds.
+ * @param target Pointer to CameraTarget struct
+ */
+static inline void SGP_CameraFollowTarget(SGPCameraTarget* target) {
+    if (!sgp.camera.active) {
+        return; // Camera not active, skip following
+    }
+    int target_x_map = F32_toInt(*target->target_x_ptr);
+    int target_y_map = F32_toInt(*target->target_y_ptr);
+
+    // Center camera on target, but clamp camera to map bounds
+    int new_camera_x = target_x_map - (screenWidth / 2) + (target->sprite_width / 2);
+    int new_camera_y = target_y_map - (screenHeight / 2) + (target->sprite_height / 2);
+
+    if (new_camera_x < 0) new_camera_x = 0;
+    if (new_camera_x > sgp.map.width - screenWidth) new_camera_x = sgp.map.width - screenWidth;
+    if (new_camera_y < 0) new_camera_y = 0;
+    if (new_camera_y > sgp.map.height - screenHeight) new_camera_y = sgp.map.height - screenHeight;
+
+    sgp.camera.current_x = new_camera_x;
+    sgp.camera.current_y = new_camera_y;
+
+    MAP_scrollTo(sgp.map.current, new_camera_x, new_camera_y);
+    if (target->sprite) {
+        SPR_setPosition(target->sprite,
+            target_x_map - new_camera_x,
+            target_y_map - new_camera_y);
+    }
+}
+
+/**
+ * @brief Activates the camera, allowing it to follow a target.
+ */
+static inline void SGP_activateCamera(void) {
+    sgp.camera.active = TRUE;
+}
+/**
+ * @brief Deactivates the camera, stopping it from following a target.
+ */
+static inline void SGP_deactivateCamera(void) {
+    sgp.camera.active = FALSE;
+}
+/**
+ * @brief Checks if the camera is currently active.
+ * @return True if the camera is active, false otherwise.
+ */
+static inline bool SGP_isCameraActive(void) {
+    return sgp.camera.active;
+}
+/**
+ * @brief Updates the camera position directly without following a target.
+ * @param x New X position
+ * @param y New Y position
+ */
+static inline void SGP_UpdateCameraPosition(int x, int y) {
+    if (sgp.camera.active) {
+        return; // if active, camera tracks target
+    }
+    sgp.camera.current_x = x;
+    sgp.camera.current_y = y;
+    MAP_scrollTo(sgp.map.current, x, y);
+}
+
+/**
+ * @brief Shakes the camera for a specified duration and intensity.
+ * @param duration Duration of the shake in frames
+ * @param intensity Intensity of the shake (in pixels)
+ */
+static inline void SGP_ShakeCamera(int duration, int intensity) {
+    SGP_deactivateCamera(); // Disable camera tracking during shake
+    for (int i = 0; i < duration; i++) {
+        int shake_x = (i % 2 == 0) ? intensity : -intensity;
+        sgp.camera.current_x += shake_x;
+        SGP_UpdateCameraPosition(sgp.camera.current_x, sgp.camera.current_y);
+        SYS_doVBlankProcess(); // Wait for VBlank to apply shake
+        sgp.camera.current_x -= shake_x; // Restore position for next frame
+    }
+    SGP_activateCamera(); // Re-enable camera tracking after shake
+}
+
+/**
+ * @brief Initializes default Sega Genesis Platform Abstraction Layer (SGP) state.
  * Call once at startup.
  */
 static inline void SGP_init(void) {
@@ -131,6 +293,12 @@ static inline void SGP_init(void) {
     sgp.input.joy2_state = 0;
     sgp.input.joy1_previous = 0;
     sgp.input.joy2_previous = 0;
+    sgp.camera.offset_x = 0;
+    sgp.camera.offset_y = 0;
+    sgp.camera.target_x = 0;
+    sgp.camera.target_y = 0;
+    sgp.camera.current_x = 0;
+    sgp.camera.current_y = 0;
 }
 
 #endif // SGP_H
