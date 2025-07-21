@@ -51,6 +51,14 @@ typedef struct {
     u16 joy2_previous;   ///< Previous state of joypad 2
 } input;
 
+
+typedef struct {
+    Map* current;
+    Map* previous;
+    u16 height;
+    u16 width;
+} SGPMap;
+
 /**
  * @brief Camera state for smooth scrolling and transformations.
  *
@@ -68,14 +76,8 @@ typedef struct {
     s16 sprite_width;  ///< Width of the sprite being followed
     s16 sprite_height; ///< Height of the sprite being followed
     bool active;
+    SGPMap* map; ///< Pointer to the current map being viewed
 } SGPCamera;
-
-typedef struct {
-    Map* current;
-    Map* previous;
-    u16 height;
-    u16 width;
-} SGPMap;
 
 /**
  * @brief Platform-wide state for input and camera.
@@ -86,7 +88,6 @@ typedef struct {
 typedef struct {
     input input;         ///< Input state
     SGPCamera camera;    ///< Camera state
-    SGPMap map;          ///< Current map state
 } SGP;
 
 /**
@@ -180,9 +181,9 @@ typedef struct {
  * @param current_y   Target Y position
  */
 static inline void SGP_CameraInit(const Map* map) {
-    sgp.map.current = map;
-    sgp.map.height = __inPx(map->h);
-    sgp.map.width = __inPx(map->w);
+    sgp.camera.map->current = map;
+    sgp.camera.map->height = __inPx(map->h);
+    sgp.camera.map->width = __inPx(map->w);
     sgp.camera.active = TRUE;
 }
 /**
@@ -198,9 +199,9 @@ static inline void SGP_ClampPositionToMapBounds(fix32* x, fix32* y, s16 width, s
 
     // Clamp position to map bounds (entity always visible on map, accounting for sprite dimensions)
     if (pos_x < 0) *x = FIX32(0);
-    if (pos_x > sgp.map.width - 1 - width) *x = FIX32(sgp.map.width - 1 - width);
+    if (pos_x > sgp.camera.map->width - 1 - width) *x = FIX32(sgp.camera.map->width - 1 - width);
     if (pos_y < 0) *y = FIX32(0);
-    if (pos_y > sgp.map.height - height) *y = FIX32(sgp.map.height - height);
+    if (pos_y > sgp.camera.map->height - height) *y = FIX32(sgp.camera.map->height - height);
 }
 
 /**
@@ -219,14 +220,14 @@ static inline void SGP_CameraFollowTarget(SGPCameraTarget* target) {
     int new_camera_y = target_y_map - (screenHeight / 2) + (target->sprite_height / 2);
 
     if (new_camera_x < 0) new_camera_x = 0;
-    if (new_camera_x > sgp.map.width - screenWidth) new_camera_x = sgp.map.width - screenWidth;
+    if (new_camera_x > sgp.camera.map->width - screenWidth) new_camera_x = sgp.camera.map->width - screenWidth;
     if (new_camera_y < 0) new_camera_y = 0;
-    if (new_camera_y > sgp.map.height - screenHeight) new_camera_y = sgp.map.height - screenHeight;
+    if (new_camera_y > sgp.camera.map->height - screenHeight) new_camera_y = sgp.camera.map->height - screenHeight;
 
     sgp.camera.current_x = new_camera_x;
     sgp.camera.current_y = new_camera_y;
 
-    MAP_scrollTo(sgp.map.current, new_camera_x, new_camera_y);
+    MAP_scrollTo(sgp.camera.map->current, new_camera_x, new_camera_y);
     if (target->sprite) {
         SPR_setPosition(target->sprite,
             target_x_map - new_camera_x,
@@ -264,7 +265,7 @@ static inline void SGP_UpdateCameraPosition(int x, int y) {
     }
     sgp.camera.current_x = x;
     sgp.camera.current_y = y;
-    MAP_scrollTo(sgp.map.current, x, y);
+    MAP_scrollTo(sgp.camera.map->current, x, y);
 }
 
 /**
@@ -299,6 +300,36 @@ static inline void SGP_init(void) {
     sgp.camera.target_y = 0;
     sgp.camera.current_x = 0;
     sgp.camera.current_y = 0;
+    static Map defaultMap = {
+        .w = 0,
+        .h = 0,
+        .metaTiles = NULL,
+        .blocks = NULL,
+        .blockIndexes = NULL,
+        .blockRowOffsets = NULL,
+        .plane = BG_A,
+        .baseTile = 0,
+        .posX = 0,
+        .posY = 0,
+        .wMask = 0,
+        .hMask = 0,
+        .planeWidth = 0,
+        .planeHeight = 0,
+        .planeWidthMaskAdj = 0,
+        .planeHeightMaskAdj = 0,
+        .planeWidthSftAdj = 0,
+        .firstUpdate = TRUE,
+        .lastXT = 0,
+        .lastYT = 0,
+    };
+    if (!sgp.camera.map) {
+        static SGPMap defaultSGPMap;
+        sgp.camera.map = &defaultSGPMap;
+    }
+    sgp.camera.map->current = &defaultMap;
+    sgp.camera.map->previous = &defaultMap;
+    sgp.camera.map->height = 0;
+    sgp.camera.map->width = 0;
 }
 
 #endif // SGP_H
