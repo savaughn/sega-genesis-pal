@@ -36,7 +36,7 @@
 #define VDP_SPRITE_OFFSET 0x80 // Offset for sprite coordinates in VDP
 
 // Each metatile is 16x16 pixels, so 128x128 pixels block is 8x8 metatiles
-static inline s16 __inPx(s16 x) { return x << 7; }
+static inline s16 SGP_MetatilesToPixels(s16 x) { return x << 7; }
 
 //----------------------------------------------------------------------------------
 // Types and Structures Definition
@@ -78,9 +78,19 @@ typedef struct
     s16 sprite_width;  // Width of the sprite being followed
     s16 sprite_height; // Height of the sprite being followed
     bool active;
-    SGPMap *map; // Pointer to the current map being viewed
+    Map *map;               // Pointer to the current map being viewed
+    s16 map_height;
+    s16 map_width;
     s8 max_vertical_scroll; // in Tiles (default 32), used to limit camera scroll
 } SGPCamera;
+
+typedef struct
+{
+    u16 x; // X position of the box
+    u16 y; // Y position of the box
+    u16 w; // Width of the box
+    u16 h; // Height of the box
+} SGPBox;
 
 /**
  * @brief Platform-wide state for input and camera.
@@ -99,22 +109,27 @@ typedef struct
  */
 extern SGP sgp;
 
-static bool showDebug = FALSE;
-static inline void toggleDebug(void)
+/**
+ * @brief Initializes default Sega Genesis Platform Abstraction Layer (SGP) state.
+ * Call once at startup.
+ */
+static inline void SGP_init(void)
 {
-    showDebug = showDebug ? FALSE : TRUE;
-}
-static inline void SGP_DebugPrint(const char *text, s16 x, s16 y)
-{
-    if (showDebug)
-    {
-        VDP_setWindowVPos(FALSE, 4);
-        VDP_drawTextEx(WINDOW, text, TILE_ATTR(PAL1, FALSE, FALSE, FALSE), x, y, DMA);
-    }
-    else
-    {
-        VDP_setWindowVPos(FALSE, 0);
-    }
+    sgp.input.joy1_state = 0;
+    sgp.input.joy2_state = 0;
+    sgp.input.joy1_previous = 0;
+    sgp.input.joy2_previous = 0;
+    sgp.camera.offset_x = 0;
+    sgp.camera.offset_y = 0;
+    sgp.camera.target_x = 0;
+    sgp.camera.target_y = 0;
+    sgp.camera.current_x = 0;
+    sgp.camera.current_y = 0;
+    sgp.camera.active = FALSE;
+    sgp.camera.map = NULL;
+    sgp.camera.map_height = 0;
+    sgp.camera.map_width = 0;
+    sgp.camera.max_vertical_scroll = 32;
 }
 
 //----------------------------------------------------------------------------------
@@ -142,11 +157,9 @@ static inline void SGP_PollInput(void)
  */
 static inline bool SGP_ButtonPressed(u16 joy, u16 button)
 {
-    static u16 *const state_ptrs[2] = {&sgp.input.joy1_state, &sgp.input.joy2_state};
-    static u16 *const prev_ptrs[2] = {&sgp.input.joy1_previous, &sgp.input.joy2_previous};
-    u16 state = *state_ptrs[joy & 1];
-    u16 prev = *prev_ptrs[joy & 1];
-    return ((state & button) & ~(prev & button)) != 0;
+    u16 state = (joy == JOY_1) ? sgp.input.joy1_state : sgp.input.joy2_state;
+    u16 prev = (joy == JOY_1) ? sgp.input.joy1_previous : sgp.input.joy2_previous;
+    return ((state & button) != 0) && ((prev & button) == 0);
 }
 
 /**
@@ -157,11 +170,9 @@ static inline bool SGP_ButtonPressed(u16 joy, u16 button)
  */
 static inline bool SGP_ButtonReleased(u16 joy, u16 button)
 {
-    static u16 *const state_ptrs[2] = {&sgp.input.joy1_state, &sgp.input.joy2_state};
-    static u16 *const prev_ptrs[2] = {&sgp.input.joy1_previous, &sgp.input.joy2_previous};
-    u16 state = *state_ptrs[joy & 1];
-    u16 prev = *prev_ptrs[joy & 1];
-    return ((~state & button) & (prev & button)) != 0;
+    u16 state = (joy == JOY_1) ? sgp.input.joy1_state : sgp.input.joy2_state;
+    u16 prev = (joy == JOY_1) ? sgp.input.joy1_previous : sgp.input.joy2_previous;
+    return ((state & button) == 0) && ((prev & button) != 0);
 }
 
 /**
@@ -172,9 +183,19 @@ static inline bool SGP_ButtonReleased(u16 joy, u16 button)
  */
 static inline bool SGP_ButtonDown(u16 joy, u16 button)
 {
-    static u16 *const state_ptrs[2] = {&sgp.input.joy1_state, &sgp.input.joy2_state};
-    u16 state = *state_ptrs[joy & 1];
+    u16 state = (joy == JOY_1) ? sgp.input.joy1_state : sgp.input.joy2_state;
     return (state & button) != 0;
+}
+
+//----------------------------------------------------------------------------------
+// Collision Functions
+//----------------------------------------------------------------------------------
+static inline bool SGP_CheckCollision(const SGPBox *a, const SGPBox *b)
+{
+    return (a->x < b->x + b->w &&
+            a->x + a->w > b->x &&
+            a->y < b->y + b->h &&
+            a->y + a->h > b->y);
 }
 
 //----------------------------------------------------------------------------------
@@ -195,12 +216,13 @@ typedef struct
  * @param current_x   Target X position
  * @param current_y   Target Y position
  */
-static inline void SGP_CameraInit(const Map *map)
+static inline int SGP_CameraInit(Map *map)
 {
-    sgp.camera.map->current = map;
-    sgp.camera.map->height = __inPx(map->h);
-    sgp.camera.map->width = __inPx(map->w);
+    sgp.camera.map = map;
+    sgp.camera.map_height = SGP_MetatilesToPixels(map->h);
+    sgp.camera.map_width = SGP_MetatilesToPixels(map->w);
     sgp.camera.active = TRUE;
+    return sgp.camera.map != NULL;
 }
 /**
  * @brief Clamps the given fixed-point position to the map bounds.
@@ -217,12 +239,12 @@ static inline void SGP_ClampPositionToMapBounds(fix32 *x, fix32 *y, s16 width, s
     // Clamp position to map bounds (entity always visible on map, accounting for sprite dimensions)
     if (pos_x < 0)
         *x = FIX32(0);
-    if (pos_x > sgp.camera.map->width - 1 - width)
-        *x = FIX32(sgp.camera.map->width - 1 - width);
+    if (pos_x > sgp.camera.map_width - 1 - width)
+        *x = FIX32(sgp.camera.map_width - 1 - width);
     if (pos_y < 0)
         *y = FIX32(0);
-    if (pos_y > sgp.camera.map->height - height)
-        *y = FIX32(sgp.camera.map->height - height);
+    if (pos_y > sgp.camera.map_height - height)
+        *y = FIX32(sgp.camera.map_height - height);
 }
 
 /**
@@ -231,7 +253,7 @@ static inline void SGP_ClampPositionToMapBounds(fix32 *x, fix32 *y, s16 width, s
  */
 static inline void SGP_CameraFollowTarget(SGPCameraTarget *target)
 {
-    if (!sgp.camera.active)
+    if (!sgp.camera.active) // Check if camera is active and map is set
     {
         return; // Camera not active, skip following
     }
@@ -244,12 +266,12 @@ static inline void SGP_CameraFollowTarget(SGPCameraTarget *target)
 
     if (new_camera_x < 0)
         new_camera_x = 0;
-    if (new_camera_x > sgp.camera.map->width - screenWidth)
-        new_camera_x = sgp.camera.map->width - screenWidth;
+    if (new_camera_x > sgp.camera.map_width - screenWidth)
+        new_camera_x = sgp.camera.map_width - screenWidth;
     if (new_camera_y < 0)
         new_camera_y = 0;
-    if (new_camera_y > sgp.camera.map->height - screenHeight)
-        new_camera_y = sgp.camera.map->height - screenHeight;
+    if (new_camera_y > sgp.camera.map_height - screenHeight)
+        new_camera_y = sgp.camera.map_height - screenHeight;
 
     if ((sgp.camera.current_x != new_camera_x) ||
         (sgp.camera.current_y != new_camera_y))
@@ -266,7 +288,7 @@ static inline void SGP_CameraFollowTarget(SGPCameraTarget *target)
             bg_vscroll = 32;
         }
 
-        MAP_scrollTo(sgp.camera.map->current, new_camera_x, new_camera_y);
+        MAP_scrollTo(sgp.camera.map, new_camera_x, new_camera_y);
         VDP_setHorizontalScroll(BG_B, bg_hscroll);
         VDP_setVerticalScroll(BG_B, bg_vscroll);
     }
@@ -313,7 +335,7 @@ static inline void SGP_UpdateCameraPosition(s16 x, s16 y)
     }
     sgp.camera.current_x = x;
     sgp.camera.current_y = y;
-    MAP_scrollTo(sgp.camera.map->current, x, y);
+    MAP_scrollTo(sgp.camera.map, x, y);
 }
 /**
  * @brief Sets the horizontal scroll limit for the camera.
@@ -337,11 +359,12 @@ static inline s16 SGP_CameraGetVerticalScrollLimit(void)
     return sgp.camera.max_vertical_scroll;
 }
 
-
 /**
  * @brief Shakes the camera for a specified duration and intensity.
  * @param duration Duration of the shake in frames
  * @param intensity intensity of the shake (in pixels)
+ *
+ * This is just for fun not a serious feature.
  */
 static inline void SGP_ShakeCamera(s16 duration, s16 intensity)
 {
@@ -357,55 +380,41 @@ static inline void SGP_ShakeCamera(s16 duration, s16 intensity)
     SGP_activateCamera(); // Re-enable camera tracking after shake
 }
 
-/**
- * @brief Initializes default Sega Genesis Platform Abstraction Layer (SGP) state.
- * Call once at startup.
- */
-static inline void SGP_init(void)
+//----------------------------------------------------------------------------------
+// Debug Functions
+//----------------------------------------------------------------------------------
+#ifdef DEBUG
+static bool showDebug = false;
+static inline void SGP_ToggleDebug(void)
 {
-    sgp.input.joy1_state = 0;
-    sgp.input.joy2_state = 0;
-    sgp.input.joy1_previous = 0;
-    sgp.input.joy2_previous = 0;
-    sgp.camera.offset_x = 0;
-    sgp.camera.offset_y = 0;
-    sgp.camera.target_x = 0;
-    sgp.camera.target_y = 0;
-    sgp.camera.current_x = 0;
-    sgp.camera.current_y = 0;
-    sgp.camera.active = FALSE;
-    static Map defaultMap = {
-        .w = 0,
-        .h = 0,
-        .metaTiles = NULL,
-        .blocks = NULL,
-        .blockIndexes = NULL,
-        .blockRowOffsets = NULL,
-        .plane = BG_A,
-        .baseTile = 0,
-        .posX = 0,
-        .posY = 0,
-        .wMask = 0,
-        .hMask = 0,
-        .planeWidth = 0,
-        .planeHeight = 0,
-        .planeWidthMaskAdj = 0,
-        .planeHeightMaskAdj = 0,
-        .planeWidthSftAdj = 0,
-        .firstUpdate = TRUE,
-        .lastXT = 0,
-        .lastYT = 0,
-    };
-    if (!sgp.camera.map)
+    showDebug = !showDebug;
+}
+
+static inline bool SGP_isDebugEnabled(void)
+{
+    return showDebug;
+}
+
+static inline void SGP_DebugPrint(const char *text, s16 x, s16 y)
+{
+    if (SGP_isDebugEnabled())
     {
-        static SGPMap defaultSGPMap;
-        sgp.camera.map = &defaultSGPMap;
+        VDP_setWindowVPos(FALSE, 4);
+        VDP_drawTextEx(WINDOW, text, TILE_ATTR(PAL1, FALSE, FALSE, FALSE), x, y, DMA);
     }
-    sgp.camera.map->current = &defaultMap;
-    sgp.camera.map->previous = &defaultMap;
-    sgp.camera.map->height = 0;
-    sgp.camera.map->width = 0;
-    sgp.camera.max_vertical_scroll = 32;
+    else
+    {
+        VDP_setWindowVPos(FALSE, 0);
+    }
+}
+
+#endif // DEBUG
+static inline void SGP_HandleError(const char *text)
+{
+    VDP_drawText(text, 0, 0);
+    while (TRUE)
+    {
+    } // Halt execution
 }
 
 #endif // SGP_H
