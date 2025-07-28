@@ -87,8 +87,8 @@ typedef struct
     fix32 *target_x; // Camera target X
     fix32 *target_y; // Camera target Y
     u8 type;         // Camera type (e.g. CAMERA_SMOOTH)
-    u16 current_x;   // Camera X position (integer for MAP_scrollTo)
-    u16 current_y;   // Camera Y position (integer for MAP_scrollTo)
+    u32 current_x;   // Camera X position (integer for MAP_scrollTo)
+    u32 current_y;   // Camera Y position (integer for MAP_scrollTo)
     Sprite *sprite;
     u16 sprite_width;  // Width of the sprite being followed
     u16 sprite_height; // Height of the sprite being followed
