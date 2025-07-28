@@ -181,7 +181,7 @@ static inline bool SGP_isDebugEnabled(void)
 
 static inline void SGP_DebugPrint(const char *text, u16 x, u16 y)
 {
-    if (y > 4 ) {
+    if (y > 4) {
         return;
     }
     if (SGP_isDebugEnabled())
