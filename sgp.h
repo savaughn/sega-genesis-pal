@@ -35,8 +35,23 @@
 #define BUTTON_NONE 0x0000
 #define VDP_SPRITE_OFFSET 0x80 // Offset for sprite coordinates in VDP
 
+// Collision flag bitmasks
+#define COLLIDE_DOWN  (1 << 0)
+#define COLLIDE_UP    (1 << 1)
+#define COLLIDE_LEFT  (1 << 2)
+#define COLLIDE_RIGHT (1 << 3)
+
+// Bitwise flag helper macros
+#define SET_ACTIVE(flags, mask)      ((flags) |= (mask))
+#define SET_INACTIVE(flags, mask)    ((flags) &= ~(mask))
+#define FLAG_IS_ACTIVE(flags, mask)   (((flags) & (mask)) != 0)
+#define FLAG_IS_INACTIVE(flags, mask) (((flags) & (mask)) == 0)
+
+#define DEBUG 1
+static const u16 SOLID_TILE = 1;
+
 // Each metatile is 16x16 pixels, so 128x128 pixels block is 8x8 metatiles
-static inline s16 SGP_MetatilesToPixels(s16 x) { return x << 7; }
+static inline u16 SGP_MetatilesToPixels(u16 x) { return x << 7; }
 
 //----------------------------------------------------------------------------------
 // Types and Structures Definition
@@ -50,7 +65,7 @@ typedef struct
     u16 joy2_state;    // Current state of joypad 2
     u16 joy1_previous; // Previous state of joypad 1
     u16 joy2_previous; // Previous state of joypad 2
-} input;
+} SGPInput;
 
 typedef struct
 {
@@ -72,16 +87,16 @@ typedef struct
     fix32 *target_x; // Camera target X
     fix32 *target_y; // Camera target Y
     u8 type;         // Camera type (e.g. CAMERA_SMOOTH)
-    s16 current_x;   // Camera X position (integer for MAP_scrollTo)
-    s16 current_y;   // Camera Y position (integer for MAP_scrollTo)
+    u16 current_x;   // Camera X position (integer for MAP_scrollTo)
+    u16 current_y;   // Camera Y position (integer for MAP_scrollTo)
     Sprite *sprite;
-    s16 sprite_width;  // Width of the sprite being followed
-    s16 sprite_height; // Height of the sprite being followed
+    u16 sprite_width;  // Width of the sprite being followed
+    u16 sprite_height; // Height of the sprite being followed
     bool active;
     Map *map;               // Pointer to the current map being viewed
-    s16 map_height;
-    s16 map_width;
-    s8 max_vertical_scroll; // in Tiles (default 32), used to limit camera scroll
+    u16 map_height;
+    u16 map_width;
+    u16 max_vertical_scroll; // in Tiles (default 32), used to limit camera scroll
 } SGPCamera;
 
 typedef struct
@@ -100,9 +115,26 @@ typedef struct
  */
 typedef struct
 {
-    input input;      // Input state
+    SGPInput input;   // Input state
     SGPCamera camera; // Camera state
 } SGP;
+
+/**
+ * @brief Movement directions for sprites and objects.
+ */
+typedef enum
+{
+	SGP_DIR_UP = 1,
+	SGP_DIR_DOWN = 2,
+	SGP_DIR_LEFT = 4,
+	SGP_DIR_RIGHT = 8
+} SGPMovementDirection;
+
+typedef struct
+{
+	u16 length;
+	const u8 *collision_data;
+} SGPLevelCollisionData;
 
 /**
  * @brief Global platform state (must be defined in one .c file).
@@ -131,6 +163,39 @@ static inline void SGP_init(void)
     sgp.camera.map_width = 0;
     sgp.camera.max_vertical_scroll = 32;
 }
+
+//----------------------------------------------------------------------------------
+// Debug Functions
+//----------------------------------------------------------------------------------
+#ifdef DEBUG
+static bool showDebug = TRUE;
+static inline void SGP_ToggleDebug(void)
+{
+    showDebug = !showDebug;
+}
+
+static inline bool SGP_isDebugEnabled(void)
+{
+    return showDebug;
+}
+
+static inline void SGP_DebugPrint(const char *text, u16 x, u16 y)
+{
+    if (y > 4 ) {
+        return;
+    }
+    if (SGP_isDebugEnabled())
+    {
+        VDP_setWindowVPos(FALSE, 5);
+        VDP_drawTextEx(WINDOW, text, TILE_ATTR(PAL1, FALSE, FALSE, FALSE), x, y, DMA);
+    }
+    else
+    {
+        VDP_setWindowVPos(FALSE, 0);
+    }
+}
+
+#endif // DEBUG
 
 //----------------------------------------------------------------------------------
 // Input Functions
@@ -206,8 +271,8 @@ typedef struct
     Sprite *sprite;      // Sprite to follow
     fix32 *target_x_ptr; // Target X position (fixed-point)
     fix32 *target_y_ptr; // Target Y Position (fixed-point)
-    s16 sprite_width;    // Width of the sprite being followed
-    s16 sprite_height;   // Height of the sprite being followed
+    u16 sprite_width;    // Width of the sprite being followed
+    u16 sprite_height;   // Height of the sprite being followed
 } SGPCameraTarget;
 
 /**
@@ -216,7 +281,7 @@ typedef struct
  * @param current_x   Target X position
  * @param current_y   Target Y position
  */
-static inline int SGP_CameraInit(Map *map)
+static inline u16 SGP_CameraInit(Map *map)
 {
     sgp.camera.map = map;
     sgp.camera.map_height = SGP_MetatilesToPixels(map->h);
@@ -231,7 +296,7 @@ static inline int SGP_CameraInit(Map *map)
  * @param width Width of the entity
  * @param height Height of the entity
  */
-static inline void SGP_ClampPositionToMapBounds(fix32 *x, fix32 *y, s16 width, s16 height)
+static inline void SGP_ClampPositionToMapBounds(fix32 *x, fix32 *y, u16 width, u16 height)
 {
     s16 pos_x = F32_toInt(*x);
     s16 pos_y = F32_toInt(*y);
@@ -257,8 +322,8 @@ static inline void SGP_CameraFollowTarget(SGPCameraTarget *target)
     {
         return; // Camera not active, skip following
     }
-    s16 target_x_map = F32_toInt(*target->target_x_ptr);
-    s16 target_y_map = F32_toInt(*target->target_y_ptr);
+    u16 target_x_map = F32_toInt(*target->target_x_ptr);
+    u16 target_y_map = F32_toInt(*target->target_y_ptr);
 
     // Center camera on target, but clamp camera to map bounds
     s16 new_camera_x = target_x_map - (screenWidth / 2) + (target->sprite_width / 2);
@@ -327,7 +392,7 @@ static inline bool SGP_isCameraActive(void)
  * @param x New X position
  * @param y New Y position
  */
-static inline void SGP_UpdateCameraPosition(s16 x, s16 y)
+static inline void SGP_UpdateCameraPosition(u32 x, u32 y)
 {
     if (sgp.camera.active)
     {
@@ -341,12 +406,8 @@ static inline void SGP_UpdateCameraPosition(s16 x, s16 y)
  * @brief Sets the horizontal scroll limit for the camera.
  * @param limit New vertical scroll limit in tiles
  */
-static inline void SGP_CameraSetVerticalScrollLimit(s16 limit)
+static inline void SGP_CameraSetVerticalScrollLimit(u16 limit)
 {
-    if (limit < 0)
-    {
-        limit = 0;
-    }
     sgp.camera.max_vertical_scroll = limit;
 }
 
@@ -354,7 +415,7 @@ static inline void SGP_CameraSetVerticalScrollLimit(s16 limit)
  * @brief Gets the vertical scroll limit for the camera.
  * @return Current vertical scroll limit in tiles
  */
-static inline s16 SGP_CameraGetVerticalScrollLimit(void)
+static inline u16 SGP_CameraGetVerticalScrollLimit(void)
 {
     return sgp.camera.max_vertical_scroll;
 }
@@ -366,10 +427,10 @@ static inline s16 SGP_CameraGetVerticalScrollLimit(void)
  *
  * This is just for fun not a serious feature.
  */
-static inline void SGP_ShakeCamera(s16 duration, s16 intensity)
+static inline void SGP_ShakeCamera(u16 duration, s16 intensity)
 {
     SGP_deactivateCamera(); // Disable camera tracking during shake
-    for (s16 i = 0; i < duration; i++)
+    for (u16 i = 0; i < duration; i++)
     {
         s16 shake_x = (i % 2 == 0) ? intensity : -intensity;
         sgp.camera.current_x += shake_x;
@@ -379,36 +440,147 @@ static inline void SGP_ShakeCamera(s16 duration, s16 intensity)
     }
     SGP_activateCamera(); // Re-enable camera tracking after shake
 }
-
 //----------------------------------------------------------------------------------
-// Debug Functions
+// Collision Functions
 //----------------------------------------------------------------------------------
-#ifdef DEBUG
-static bool showDebug = false;
-static inline void SGP_ToggleDebug(void)
+/**
+ * Checks for player collision with the level tiles using look-ahead logic.
+ * Returns TRUE if a collision is detected in the specified direction.
+ */
+static inline bool SGP_PlayerLevelCollision(
+    s16 player_x, s16 player_y, u16 player_width, u16 player_height,
+    const SGPLevelCollisionData *level, SGPMovementDirection direction)
 {
-    showDebug = !showDebug;
-}
+    s16 tile_x_left;
+    s16 tile_x_right;
+    s16 tile_y_top = player_y >> 4;
+    s16 tile_y_bottom = (player_y + player_height - 1) >> 4;
 
-static inline bool SGP_isDebugEnabled(void)
-{
-    return showDebug;
-}
+    s16 arr_ind_top_left;
+    s16 arr_ind_top_right;
+    s16 arr_ind_bottom_left;
+    s16 arr_ind_bottom_right;
 
-static inline void SGP_DebugPrint(const char *text, s16 x, s16 y)
-{
-    if (SGP_isDebugEnabled())
+    u16 type_top_left, type_top_right, type_bottom_left, type_bottom_right;
+
+    static u16 prev_collide_flags = 0;
+    static s16 prev_player_y = 0;
+    static s16 prev_player_x = 0;
+
+    if (direction & SGP_DIR_UP) // UP
     {
-        VDP_setWindowVPos(FALSE, 4);
-        VDP_drawTextEx(WINDOW, text, TILE_ATTR(PAL1, FALSE, FALSE, FALSE), x, y, DMA);
+        SET_INACTIVE(prev_collide_flags, COLLIDE_DOWN);
+
+        // Only check vertical position for up
+        if (prev_player_y == player_y && prev_player_x == player_x && FLAG_IS_ACTIVE(prev_collide_flags, COLLIDE_UP)) return TRUE;
+
+        if (player_y % 16 != 0) return FALSE;
+
+        tile_y_top = (player_y - 1) >> 4;
+        tile_x_left = (player_x + 1) >> 4;
+        arr_ind_top_left = tile_x_left + (tile_y_top * level->length);
+        type_top_left = level->collision_data[arr_ind_top_left];
+
+        tile_x_right = ((player_x + player_width - 1) >> 4);
+        arr_ind_top_right = tile_x_right + (tile_y_top * level->length);
+        type_top_right = level->collision_data[arr_ind_top_right];
+
+        prev_player_y = player_y;
+        prev_player_x = player_x;
+
+        if (type_top_left == SOLID_TILE || type_top_right == SOLID_TILE)
+            SET_ACTIVE(prev_collide_flags, COLLIDE_UP);
+        else
+            SET_INACTIVE(prev_collide_flags, COLLIDE_UP);
+
+        return FLAG_IS_ACTIVE(prev_collide_flags, COLLIDE_UP);
     }
-    else
+    else if (direction & SGP_DIR_DOWN) // DOWN
     {
-        VDP_setWindowVPos(FALSE, 0);
+        SET_INACTIVE(prev_collide_flags, COLLIDE_UP);
+
+        if ((player_y + player_height) % 16 != 0) return FALSE;
+
+        // Only check vertical position for down
+        if (prev_player_y == player_y && FLAG_IS_ACTIVE(prev_collide_flags, COLLIDE_DOWN)) return TRUE;
+        
+        tile_y_bottom = (player_y + player_height) >> 4;
+        tile_x_left = (player_x + 1) >> 4;
+        arr_ind_bottom_left = tile_x_left + (tile_y_bottom * level->length);
+        type_bottom_left = level->collision_data[arr_ind_bottom_left];
+
+        tile_x_right = ((player_x + player_width - 1) >> 4);
+        arr_ind_bottom_right = tile_x_right + (tile_y_bottom * level->length);
+        type_bottom_right = level->collision_data[arr_ind_bottom_right];
+
+        prev_player_y = player_y;
+        prev_player_x = player_x;
+
+        if (type_bottom_left == SOLID_TILE || type_bottom_right == SOLID_TILE)
+            SET_ACTIVE(prev_collide_flags, COLLIDE_DOWN);
+        else
+            SET_INACTIVE(prev_collide_flags, COLLIDE_DOWN);
+
+        return FLAG_IS_ACTIVE(prev_collide_flags, COLLIDE_DOWN);
     }
+    else {
+        SET_INACTIVE(prev_collide_flags, COLLIDE_DOWN | COLLIDE_UP);
+    }
+
+    if (direction & SGP_DIR_LEFT) // LEFT
+    {
+        SET_INACTIVE(prev_collide_flags, COLLIDE_RIGHT);
+
+        // Only check horizontal position for left
+        if (prev_player_x == player_x && prev_player_y == player_y && FLAG_IS_ACTIVE(prev_collide_flags, COLLIDE_LEFT)) return TRUE;
+        if (player_x % 16 != 0) return FALSE;
+
+        tile_x_left = (player_x - 1) >> 4;
+        arr_ind_top_left = tile_x_left + (tile_y_top * level->length);
+        type_top_left = level->collision_data[arr_ind_top_left];
+
+        arr_ind_bottom_left = tile_x_left + (tile_y_bottom * level->length);
+        type_bottom_left = level->collision_data[arr_ind_bottom_left];
+
+        prev_player_x = player_x;
+        prev_player_y = player_y;
+
+        if (type_top_left == SOLID_TILE || type_bottom_left == SOLID_TILE)
+            SET_ACTIVE(prev_collide_flags, COLLIDE_LEFT);
+        else
+            SET_INACTIVE(prev_collide_flags, COLLIDE_LEFT);
+
+        return FLAG_IS_ACTIVE(prev_collide_flags, COLLIDE_LEFT);
+    }
+    else if (direction & SGP_DIR_RIGHT) // RIGHT
+    {
+        SET_INACTIVE(prev_collide_flags, COLLIDE_LEFT);
+
+        // Only check horizontal position for right
+        if (prev_player_x == player_x && prev_player_y == player_y && FLAG_IS_ACTIVE(prev_collide_flags, COLLIDE_RIGHT)) return TRUE;
+        if ((player_x + player_width) % 16 != 0) return FALSE;
+
+        tile_x_right = (player_x + player_width + 1) >> 4;
+        arr_ind_top_right = tile_x_right + (tile_y_top * level->length);
+        arr_ind_bottom_right = tile_x_right + (tile_y_bottom * level->length);
+        type_top_right = level->collision_data[arr_ind_top_right];
+        type_bottom_right = level->collision_data[arr_ind_bottom_right];
+
+        prev_player_x = player_x;
+        prev_player_y = player_y;
+
+        if (type_top_right == SOLID_TILE || type_bottom_right == SOLID_TILE)
+            SET_ACTIVE(prev_collide_flags, COLLIDE_RIGHT);
+        else
+            SET_INACTIVE(prev_collide_flags, COLLIDE_RIGHT);
+
+        return FLAG_IS_ACTIVE(prev_collide_flags, COLLIDE_RIGHT);
+    } else {
+        SET_INACTIVE(prev_collide_flags, COLLIDE_LEFT | COLLIDE_RIGHT);
+    }
+    return FALSE; // No collision detected
 }
 
-#endif // DEBUG
 static inline void SGP_HandleError(const char *text)
 {
     VDP_drawText(text, 0, 0);
