@@ -560,7 +560,7 @@ static inline bool SGP_PlayerLevelCollision(
         if (prev_player_x == player_x && prev_player_y == player_y && FLAG_IS_ACTIVE(prev_collide_flags, COLLIDE_RIGHT)) return true;
         if ((player_x + player_width) % 16 != 0) return FALSE;
 
-        tile_x_right = (player_x + player_width + 1) >> 4;
+        tile_x_right = (player_x + player_width) >> 4;
         arr_ind_top_right = tile_x_right + (tile_y_top * level->length);
         arr_ind_bottom_right = tile_x_right + (tile_y_bottom * level->length);
         type_top_right = level->collision_data[arr_ind_top_right];
