@@ -47,7 +47,6 @@
 #define FLAG_IS_ACTIVE(flags, mask) (((flags) & (mask)) != 0)
 #define FLAG_IS_INACTIVE(flags, mask) (((flags) & (mask)) == 0)
 
-#define DEBUG 1
 #define SGP_MAX_ENTITIES 2
 
 static const u16 SOLID_TILE = 1;
