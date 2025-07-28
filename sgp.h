@@ -168,7 +168,7 @@ static inline void SGP_init(void)
 // Debug Functions
 //----------------------------------------------------------------------------------
 #ifdef DEBUG
-static bool showDebug = TRUE;
+static bool showDebug = true;
 static inline void SGP_ToggleDebug(void)
 {
     showDebug = !showDebug;
@@ -286,7 +286,7 @@ static inline u16 SGP_CameraInit(Map *map)
     sgp.camera.map = map;
     sgp.camera.map_height = SGP_MetatilesToPixels(map->h);
     sgp.camera.map_width = SGP_MetatilesToPixels(map->w);
-    sgp.camera.active = TRUE;
+    sgp.camera.active = true;
     return sgp.camera.map != NULL;
 }
 /**
@@ -370,7 +370,7 @@ static inline void SGP_CameraFollowTarget(SGPCameraTarget *target)
  */
 static inline void SGP_activateCamera(void)
 {
-    sgp.camera.active = TRUE;
+    sgp.camera.active = true;
 }
 /**
  * @brief Deactivates the camera, stopping it from following a target.
@@ -445,7 +445,7 @@ static inline void SGP_ShakeCamera(u16 duration, s16 intensity)
 //----------------------------------------------------------------------------------
 /**
  * Checks for player collision with the level tiles using look-ahead logic.
- * Returns TRUE if a collision is detected in the specified direction.
+ * Returns true if a collision is detected in the specified direction.
  */
 static inline bool SGP_PlayerLevelCollision(
     s16 player_x, s16 player_y, u16 player_width, u16 player_height,
@@ -472,7 +472,7 @@ static inline bool SGP_PlayerLevelCollision(
         SET_INACTIVE(prev_collide_flags, COLLIDE_DOWN);
 
         // Only check vertical position for up
-        if (prev_player_y == player_y && prev_player_x == player_x && FLAG_IS_ACTIVE(prev_collide_flags, COLLIDE_UP)) return TRUE;
+        if (prev_player_y == player_y && prev_player_x == player_x && FLAG_IS_ACTIVE(prev_collide_flags, COLLIDE_UP)) return true;
 
         if (player_y % 16 != 0) return FALSE;
 
@@ -502,7 +502,7 @@ static inline bool SGP_PlayerLevelCollision(
         if ((player_y + player_height) % 16 != 0) return FALSE;
 
         // Only check vertical position for down
-        if (prev_player_y == player_y && FLAG_IS_ACTIVE(prev_collide_flags, COLLIDE_DOWN)) return TRUE;
+        if (prev_player_y == player_y && FLAG_IS_ACTIVE(prev_collide_flags, COLLIDE_DOWN)) return true;
         
         tile_y_bottom = (player_y + player_height) >> 4;
         tile_x_left = (player_x + 1) >> 4;
@@ -532,7 +532,7 @@ static inline bool SGP_PlayerLevelCollision(
         SET_INACTIVE(prev_collide_flags, COLLIDE_RIGHT);
 
         // Only check horizontal position for left
-        if (prev_player_x == player_x && prev_player_y == player_y && FLAG_IS_ACTIVE(prev_collide_flags, COLLIDE_LEFT)) return TRUE;
+        if (prev_player_x == player_x && prev_player_y == player_y && FLAG_IS_ACTIVE(prev_collide_flags, COLLIDE_LEFT)) return true;
         if (player_x % 16 != 0) return FALSE;
 
         tile_x_left = (player_x - 1) >> 4;
@@ -557,7 +557,7 @@ static inline bool SGP_PlayerLevelCollision(
         SET_INACTIVE(prev_collide_flags, COLLIDE_LEFT);
 
         // Only check horizontal position for right
-        if (prev_player_x == player_x && prev_player_y == player_y && FLAG_IS_ACTIVE(prev_collide_flags, COLLIDE_RIGHT)) return TRUE;
+        if (prev_player_x == player_x && prev_player_y == player_y && FLAG_IS_ACTIVE(prev_collide_flags, COLLIDE_RIGHT)) return true;
         if ((player_x + player_width) % 16 != 0) return FALSE;
 
         tile_x_right = (player_x + player_width + 1) >> 4;
@@ -584,7 +584,7 @@ static inline bool SGP_PlayerLevelCollision(
 static inline void SGP_HandleError(const char *text)
 {
     VDP_drawText(text, 0, 0);
-    while (TRUE)
+    while (true)
     {
     } // Halt execution
 }
