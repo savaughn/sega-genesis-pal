@@ -490,7 +490,7 @@ static inline bool SGP_PlayerLevelCollision(
         if (prev_player_y[player_index] == player_y && prev_player_x[player_index] == player_x && FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_UP))
             return true;
 
-        if (player_y & COLLISION_TILE_SIZE_MASK != 0)
+        if ((player_y & COLLISION_TILE_SIZE_MASK) != 0)
             return false;
 
         tile_y_top = (player_y - 1) >> PIXELS_TO_TILE_SHIFT;
@@ -516,7 +516,7 @@ static inline bool SGP_PlayerLevelCollision(
     {
         SET_INACTIVE(prev_collide_flags[player_index], COLLIDE_UP);
 
-        if ((player_y + player_height) & COLLISION_TILE_SIZE_MASK != 0)
+        if (((player_y + player_height) & COLLISION_TILE_SIZE_MASK) != 0)
             return false;
 
         // Only check vertical position for down
@@ -554,7 +554,7 @@ static inline bool SGP_PlayerLevelCollision(
         // Only check horizontal position for left
         if (prev_player_x[player_index] == player_x && prev_player_y[player_index] == player_y && FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_LEFT))
             return true;
-        if (player_x & COLLISION_TILE_SIZE_MASK != 0)
+        if ((player_x & COLLISION_TILE_SIZE_MASK) != 0)
             return false;
 
         tile_x_left = (player_x - 1) >> PIXELS_TO_TILE_SHIFT;
@@ -581,7 +581,7 @@ static inline bool SGP_PlayerLevelCollision(
         // Only check horizontal position for right
         if (prev_player_x[player_index] == player_x && prev_player_y[player_index] == player_y && FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_RIGHT))
             return true;
-        if ((player_x + player_width) & COLLISION_TILE_SIZE_MASK != 0)
+        if (((player_x + player_width) & COLLISION_TILE_SIZE_MASK) != 0)
             return false;
 
         tile_x_right = (player_x + player_width) >> PIXELS_TO_TILE_SHIFT;

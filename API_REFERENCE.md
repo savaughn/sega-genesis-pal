@@ -30,7 +30,7 @@
 ### Collision
 
 - `SGP_CheckBoxCollision(const SGPBox *a, const SGPBox *b)`
-- `SGP_PlayerLevelCollision(u16 player_index, s16 x, s16 y, u16 w, u16 h, const SGPLevelCollisionData *level, u16 direction)`
+- `SGP_PlayerLevelCollision(u16 player_index, s16 x, s16 y, u16 w, u16 h, const SGPLevelCollisionData *level, SGPMovementDirection direction)`
 
 ### Debug
 
