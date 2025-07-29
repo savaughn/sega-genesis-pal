@@ -333,8 +333,8 @@ static inline void SGP_CameraFollowTarget(SGPCameraTarget *target)
     {
         return; // Camera not active, skip following
     }
-    u16 target_x_map = F32_toInt(*target->target_x_ptr);
-    u16 target_y_map = F32_toInt(*target->target_y_ptr);
+    s32 target_x_map = F32_toInt(*target->target_x_ptr);
+    s32 target_y_map = F32_toInt(*target->target_y_ptr);
 
     // Center camera on target, but clamp camera to map bounds
     s16 new_camera_x = target_x_map - (screenWidth / 2) + (target->sprite_width / 2);
