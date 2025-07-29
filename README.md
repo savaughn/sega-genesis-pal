@@ -5,6 +5,7 @@ A lightweight, header-only abstraction layer for Sega Genesis/MegaDrive developm
 
 - **Input Management**: Edge detection for button presses/releases with dual controller support
 - **Camera System**: Smooth following, clamping, shake, and direct update
+- **Collision System**: Box collision and Player-Level collision
 - **Debug Print**: Toggleable debug text output
 - **Header-Only**: No compilation required - just include and use
 - **Performance Focused**: Inline functions and efficient state management
