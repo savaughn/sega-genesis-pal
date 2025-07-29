@@ -123,7 +123,7 @@ if (SGP_CheckBoxCollision(&player_box, &enemy_box)) {
 
 ### Tile/Level Collision
 ```c
-if (SGP_PlayerLevelCollision(player_x, player_y, 16, 16, &level_data, SGP_DIR_DOWN)) {
+if (SGP_PlayerLevelCollision(player_index, player_x, player_y, 16, 16, &level_data, SGP_DIR_DOWN)) {
     // Player is colliding with the ground below
 }
 ```
