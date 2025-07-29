@@ -84,8 +84,9 @@ typedef struct {
 #### SGPLevelCollisionData (for tile collision)
 ```c
 typedef struct {
-    u16 length;            // Row length (tiles per row)
-    const u8 *collision_data; // Pointer to collision tile data
+    u16 row_length;             // Row length (tiles per row)
+    u16 data_length;            // Total data array length (tiles)
+    const u8 *collision_data;   // Pointer to collision tile data
 } SGPLevelCollisionData;
 ```
 
@@ -195,7 +196,8 @@ typedef struct {
 ### SGPLevelCollisionData struct
 ```c
 typedef struct {
-    u16 length;
+    u16 row_length;
+    u16 data_length;
     const u8 *collision_data;
 } SGPLevelCollisionData;
 ```

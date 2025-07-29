@@ -47,7 +47,8 @@
 #define FLAG_IS_ACTIVE(flags, mask) (((flags) & (mask)) != 0)
 #define FLAG_IS_INACTIVE(flags, mask) (((flags) & (mask)) == 0)
 
-#define SGP_MAX_ENTITIES 2
+// Maximum number of player entities
+#define SGP_MAX_PLAYER_COUNT 2
 
 static const u16 SOLID_TILE = 1;
 /**
@@ -142,7 +143,8 @@ typedef enum
 
 typedef struct
 {
-    u16 length;
+    u16 row_length;
+    u16 data_length;
     const u8 *collision_data;
 } SGPLevelCollisionData;
 
@@ -178,6 +180,7 @@ static inline void SGP_init(void)
 // Debug Functions
 //----------------------------------------------------------------------------------
 #ifdef DEBUG
+#define MAX_DEBUG_LINES 4
 static bool showDebug = true;
 static inline void SGP_ToggleDebug(void)
 {
@@ -188,16 +191,15 @@ static inline bool SGP_isDebugEnabled(void)
 {
     return showDebug;
 }
-
 static inline void SGP_DebugPrint(const char *text, u16 x, u16 y)
 {
-    if (y > 4)
+    if (y > MAX_DEBUG_LINES)
     {
         return;
     }
     if (SGP_isDebugEnabled())
     {
-        VDP_setWindowVPos(false, 5);
+        VDP_setWindowVPos(false, MAX_DEBUG_LINES + 1);
         VDP_drawTextEx(WINDOW, text, TILE_ATTR(PAL1, false, false, false), x, y, DMA);
     }
     else
@@ -207,6 +209,14 @@ static inline void SGP_DebugPrint(const char *text, u16 x, u16 y)
 }
 
 #endif // DEBUG
+
+static inline void SGP_HandleError(const char *text)
+{
+    VDP_drawText(text, 0, 0);
+    while (true)
+    {
+    } // Halt execution
+}
 
 //----------------------------------------------------------------------------------
 // Input Functions
@@ -261,17 +271,6 @@ static inline bool SGP_ButtonDown(u16 joy, u16 button)
 {
     u16 state = (joy == JOY_1) ? sgp.input.joy1_state : sgp.input.joy2_state;
     return (state & button) != 0;
-}
-
-//----------------------------------------------------------------------------------
-// Collision Functions
-//----------------------------------------------------------------------------------
-static inline bool SGP_CheckCollision(const SGPBox *a, const SGPBox *b)
-{
-    return (a->x < b->x + b->w &&
-            a->x + a->w > b->x &&
-            a->y < b->y + b->h &&
-            a->y + a->h > b->y);
 }
 
 //----------------------------------------------------------------------------------
@@ -349,11 +348,11 @@ static inline void SGP_CameraFollowTarget(SGPCameraTarget *target)
     if (new_camera_y > sgp.camera.map_height - screenHeight)
         new_camera_y = sgp.camera.map_height - screenHeight;
 
-    if ((sgp.camera.current_x != new_camera_x) ||
-        (sgp.camera.current_y != new_camera_y))
+    if ((sgp.camera.current_x != (u32)new_camera_x) ||
+        (sgp.camera.current_y != (u32)new_camera_y))
     {
-        sgp.camera.current_x = new_camera_x;
-        sgp.camera.current_y = new_camera_y;
+        sgp.camera.current_x = (u32)new_camera_x;
+        sgp.camera.current_y = (u32)new_camera_y;
 
         static s16 bg_hscroll = 0, bg_vscroll = 0;
         bg_hscroll = (0 - new_camera_x) >> 3; // Convert to tile units (8 pixels)
@@ -454,6 +453,13 @@ static inline void SGP_ShakeCamera(u16 duration, s16 intensity)
 //----------------------------------------------------------------------------------
 // Collision Functions
 //----------------------------------------------------------------------------------
+static inline bool SGP_CheckBoxCollision(const SGPBox *a, const SGPBox *b)
+{
+    return (a->x < b->x + b->w &&
+            a->x + a->w > b->x &&
+            a->y < b->y + b->h &&
+            a->y + a->h > b->y);
+}
 /**
  * Checks for player collision with the level tiles using look-ahead logic.
  * Returns true if a collision is detected in the specified direction.
@@ -478,9 +484,9 @@ static inline bool SGP_PlayerLevelCollision(
      * Support multiple players by storing previous collision flags and positions
      * for each player index as static arrays.
      */
-    static u16 prev_collide_flags[SGP_MAX_ENTITIES] = {0};
-    static u16 prev_player_x[SGP_MAX_ENTITIES] = {0};
-    static u16 prev_player_y[SGP_MAX_ENTITIES] = {0};
+    static u16 prev_collide_flags[SGP_MAX_PLAYER_COUNT] = {0};
+    static u16 prev_player_x[SGP_MAX_PLAYER_COUNT] = {0};
+    static u16 prev_player_y[SGP_MAX_PLAYER_COUNT] = {0};
 
     if (direction & SGP_DIR_UP) // UP
     {
@@ -495,11 +501,13 @@ static inline bool SGP_PlayerLevelCollision(
 
         tile_y_top = (player_y - 1) >> PIXELS_TO_TILE_SHIFT;
         tile_x_left = (player_x + 1) >> PIXELS_TO_TILE_SHIFT;
-        arr_ind_top_left = tile_x_left + (tile_y_top * level->length);
+        arr_ind_top_left = tile_x_left + (tile_y_top * level->row_length);
+        if (arr_ind_top_left >= level->data_length) SGP_HandleError("Coll_arr index outofbounds top_left");
         type_top_left = level->collision_data[arr_ind_top_left];
 
         tile_x_right = ((player_x + player_width - 1) >> PIXELS_TO_TILE_SHIFT);
-        arr_ind_top_right = tile_x_right + (tile_y_top * level->length);
+        arr_ind_top_right = tile_x_right + (tile_y_top * level->row_length);
+        if (arr_ind_top_right >= level->data_length) SGP_HandleError("Coll_arr index outofbounds top_right");
         type_top_right = level->collision_data[arr_ind_top_right];
 
         prev_player_y[player_index] = player_y;
@@ -525,11 +533,13 @@ static inline bool SGP_PlayerLevelCollision(
 
         tile_y_bottom = (player_y + player_height) >> PIXELS_TO_TILE_SHIFT;
         tile_x_left = (player_x + 1) >> PIXELS_TO_TILE_SHIFT;
-        arr_ind_bottom_left = tile_x_left + (tile_y_bottom * level->length);
+        arr_ind_bottom_left = tile_x_left + (tile_y_bottom * level->row_length);
+        if (arr_ind_bottom_left >= level->data_length) SGP_HandleError("Coll_arr index outofbounds bottom_left");
         type_bottom_left = level->collision_data[arr_ind_bottom_left];
 
         tile_x_right = ((player_x + player_width - 1) >> PIXELS_TO_TILE_SHIFT);
-        arr_ind_bottom_right = tile_x_right + (tile_y_bottom * level->length);
+        arr_ind_bottom_right = tile_x_right + (tile_y_bottom * level->row_length);
+        if (arr_ind_bottom_right >= level->data_length) SGP_HandleError("Coll_arr index outofbounds bottom_right");
         type_bottom_right = level->collision_data[arr_ind_bottom_right];
 
         prev_player_y[player_index] = player_y;
@@ -558,10 +568,12 @@ static inline bool SGP_PlayerLevelCollision(
             return false;
 
         tile_x_left = (player_x - 1) >> PIXELS_TO_TILE_SHIFT;
-        arr_ind_top_left = tile_x_left + (tile_y_top * level->length);
+        arr_ind_top_left = tile_x_left + (tile_y_top * level->row_length);
+        if (arr_ind_top_left >= level->data_length) SGP_HandleError("Coll_arr index outofbounds top_left");
         type_top_left = level->collision_data[arr_ind_top_left];
 
-        arr_ind_bottom_left = tile_x_left + (tile_y_bottom * level->length);
+        arr_ind_bottom_left = tile_x_left + (tile_y_bottom * level->row_length);
+        if (arr_ind_bottom_left >= level->data_length) SGP_HandleError("Coll_arr index outofbounds bottom_left");
         type_bottom_left = level->collision_data[arr_ind_bottom_left];
 
         prev_player_x[player_index] = player_x;
@@ -585,8 +597,8 @@ static inline bool SGP_PlayerLevelCollision(
             return false;
 
         tile_x_right = (player_x + player_width) >> PIXELS_TO_TILE_SHIFT;
-        arr_ind_top_right = tile_x_right + (tile_y_top * level->length);
-        arr_ind_bottom_right = tile_x_right + (tile_y_bottom * level->length);
+        arr_ind_top_right = tile_x_right + (tile_y_top * level->row_length);
+        arr_ind_bottom_right = tile_x_right + (tile_y_bottom * level->row_length);
         type_top_right = level->collision_data[arr_ind_top_right];
         type_bottom_right = level->collision_data[arr_ind_bottom_right];
 
@@ -605,14 +617,6 @@ static inline bool SGP_PlayerLevelCollision(
         SET_INACTIVE(prev_collide_flags[player_index], COLLIDE_LEFT | COLLIDE_RIGHT);
     }
     return false; // No collision detected
-}
-
-static inline void SGP_HandleError(const char *text)
-{
-    VDP_drawText(text, 0, 0);
-    while (true)
-    {
-    } // Halt execution
 }
 
 #endif // SGP_H
