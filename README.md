@@ -44,6 +44,11 @@ int main(_bool)
 
 See [API_REFERENCE.md](API_REFERENCE.md) for the complete API, data structures, and usage examples.
 
+## TODO
+- Collisions for all types such as platforms and slopes
+- Collision for top-down vs side-scrolling
+- Physics (gravity)
+
 ## Requirements
 
 - [SGDK (Sega Genesis Development Kit)](https://github.com/Stephane-D/SGDK)
