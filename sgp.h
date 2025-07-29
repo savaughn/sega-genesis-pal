@@ -23,9 +23,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  *
- * Purpose: Header-only platform abstraction layer for Sega Genesis development
- *          using SGDK. Provides ergonomic, high-performance input and camera
- *          helpers for Genesis development.
+ * Version: 2.1
  */
 #ifndef SGP_H
 #define SGP_H
