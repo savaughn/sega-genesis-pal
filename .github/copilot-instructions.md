@@ -137,7 +137,7 @@ Since traditional building/testing is not possible, validate changes using:
    echo "Validation passed!"
    ```
 
-4. **Manual code review focused on**:
+6. **Manual code review focused on**:
    - C99 standard compliance
    - Proper use of SGDK types (u8, u16, fix32, etc.)
    - Inline function definitions are correct
