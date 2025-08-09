@@ -596,7 +596,9 @@ static inline bool SGP_PlayerLevelCollision(
 
         tile_x_right = (player_x + player_width) >> PIXELS_TO_TILE_SHIFT;
         arr_ind_top_right = tile_x_right + (tile_y_top * level->row_length);
+        if (arr_ind_top_right >= level->data_length) SGP_HandleError("Coll_arr index outofbounds top_right");
         arr_ind_bottom_right = tile_x_right + (tile_y_bottom * level->row_length);
+        if (arr_ind_bottom_right >= level->data_length) SGP_HandleError("Coll_arr index outofbounds bottom_right");
         type_top_right = level->collision_data[arr_ind_top_right];
         type_bottom_right = level->collision_data[arr_ind_bottom_right];
 
