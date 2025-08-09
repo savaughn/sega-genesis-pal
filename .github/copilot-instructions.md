@@ -1,6 +1,6 @@
 # Sega Genesis Platform Abstraction Layer (SGP)
 
-Always reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.
+Always reference these instructions first. If you encounter unexpected information not covered here, consult official SGDK documentation, Genesis/MegaDrive development resources, or reputable C programming references. Use bash commands only for validation or syntax checking as outlined in the instructions below.
 
 SGP is a header-only C library for Sega Genesis/MegaDrive development using SGDK. It provides helper functions for input management, camera control, collision detection, and debug printing. The library is designed for performance with inline functions and efficient state management.
 
