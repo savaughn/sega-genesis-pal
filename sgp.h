@@ -284,13 +284,17 @@ typedef struct
  * @param current_x   Target X position
  * @param current_y   Target Y position
  */
-static inline u16 SGP_CameraInit(Map *map)
+static inline bool SGP_CameraInit(Map *map)
 {
+    if (map == NULL) {
+        return false;
+    }
+    
     sgp.camera.map = map;
     sgp.camera.map_height = SGP_MetatilesToPixels(map->h);
     sgp.camera.map_width = SGP_MetatilesToPixels(map->w);
     sgp.camera.active = true;
-    return sgp.camera.map != NULL;
+    return true;
 }
 /**
  * @brief Clamps the given fixed-point position to the map bounds.
@@ -328,7 +332,7 @@ static inline void SGP_CameraFollowTarget(SGPCameraTarget *target)
 
     // Use target position directly as camera position, clamp to map bounds
     s16 new_camera_x = target->sprite_world_x - target->offset_x;
-    s16 new_camera_y = target->sprite_world_y + target->offset_y;
+    s16 new_camera_y = target->sprite_world_y - target->offset_y;
 
     if (new_camera_x < 0)
         new_camera_x = 0;
