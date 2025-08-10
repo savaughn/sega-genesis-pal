@@ -47,6 +47,9 @@
 #define FLAG_IS_ACTIVE(flags, mask) (((flags) & (mask)) != 0)
 #define FLAG_IS_INACTIVE(flags, mask) (((flags) & (mask)) == 0)
 
+#define SGP_OOB_HORIZONTAL_SOLID true
+#define SGP_OOB_HORIZONTAL_PASSABLE false
+
 // Maximum number of player entities
 #define SGP_MAX_PLAYER_COUNT 2
 
@@ -517,8 +520,8 @@ static inline bool SGP_PlayerLevelCollision(
         // Only check if position changed or not already flagged
         if (prev_x[player_index] == player_coll_x && prev_y[player_index] == player_coll_y && FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_LEFT))
             return true;
-        bool isColliding = SGP_TileIsSolidXY(level, tile_left, tile_top, true, false) ||
-                           SGP_TileIsSolidXY(level, tile_left, tile_bottom, true, false);
+        bool isColliding = SGP_TileIsSolidXY(level, tile_left, tile_top, SGP_OOB_HORIZONTAL_SOLID, SGP_OOB_HORIZONTAL_PASSABLE) ||
+                           SGP_TileIsSolidXY(level, tile_left, tile_bottom, SGP_OOB_HORIZONTAL_SOLID, SGP_OOB_HORIZONTAL_PASSABLE);
         prev_x[player_index] = player_coll_x;
         prev_y[player_index] = player_coll_y;
         if (isColliding)
@@ -531,8 +534,8 @@ static inline bool SGP_PlayerLevelCollision(
     {
         if (prev_x[player_index] == player_coll_x && prev_y[player_index] == player_coll_y && FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_RIGHT))
             return true;
-        bool isColliding = SGP_TileIsSolidXY(level, tile_right, tile_top, true, false) ||
-                           SGP_TileIsSolidXY(level, tile_right, tile_bottom, true, false);
+        bool isColliding = SGP_TileIsSolidXY(level, tile_right, tile_top, SGP_OOB_HORIZONTAL_SOLID, SGP_OOB_HORIZONTAL_PASSABLE) ||
+                           SGP_TileIsSolidXY(level, tile_right, tile_bottom, SGP_OOB_HORIZONTAL_SOLID, SGP_OOB_HORIZONTAL_PASSABLE);
         prev_x[player_index] = player_coll_x;
         prev_y[player_index] = player_coll_y;
         if (isColliding)
@@ -546,8 +549,8 @@ static inline bool SGP_PlayerLevelCollision(
     {
         if (prev_x[player_index] == player_coll_x && prev_y[player_index] == player_coll_y && FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_UP))
             return true;
-        bool isColliding = SGP_TileIsSolidXY(level, tile_left, tile_top, true, true) ||
-                           SGP_TileIsSolidXY(level, tile_right, tile_top, true, true);
+        bool isColliding = SGP_TileIsSolidXY(level, tile_left, tile_top, SGP_OOB_HORIZONTAL_SOLID, SGP_OOB_HORIZONTAL_SOLID) ||
+                           SGP_TileIsSolidXY(level, tile_right, tile_top, SGP_OOB_HORIZONTAL_SOLID, SGP_OOB_HORIZONTAL_SOLID);
         prev_x[player_index] = player_coll_x;
         prev_y[player_index] = player_coll_y;
         if (isColliding)
@@ -560,8 +563,8 @@ static inline bool SGP_PlayerLevelCollision(
     {
         if (prev_x[player_index] == player_coll_x && prev_y[player_index] == player_coll_y && FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_DOWN))
             return true;
-        bool isColliding = SGP_TileIsSolidXY(level, tile_left, tile_bottom, true, true) ||
-                           SGP_TileIsSolidXY(level, tile_right, tile_bottom, true, true);
+        bool isColliding = SGP_TileIsSolidXY(level, tile_left, tile_bottom, SGP_OOB_HORIZONTAL_SOLID, SGP_OOB_HORIZONTAL_SOLID) ||
+                           SGP_TileIsSolidXY(level, tile_right, tile_bottom, SGP_OOB_HORIZONTAL_SOLID, SGP_OOB_HORIZONTAL_SOLID);
         prev_x[player_index] = player_coll_x;
         prev_y[player_index] = player_coll_y;
         if (isColliding)
@@ -571,10 +574,10 @@ static inline bool SGP_PlayerLevelCollision(
         return isColliding;
     }
     // Fallback: general rectangle-solid overlap (treat OOB as solid)
-    return SGP_TileIsSolid(level, tile_left, tile_top, true) ||
-           SGP_TileIsSolid(level, tile_right, tile_top, true) ||
-           SGP_TileIsSolid(level, tile_left, tile_bottom, true) ||
-           SGP_TileIsSolid(level, tile_right, tile_bottom, true);
+    return SGP_TileIsSolid(level, tile_left, tile_top, SGP_OOB_HORIZONTAL_SOLID) ||
+           SGP_TileIsSolid(level, tile_right, tile_top, SGP_OOB_HORIZONTAL_SOLID) ||
+           SGP_TileIsSolid(level, tile_left, tile_bottom, SGP_OOB_HORIZONTAL_SOLID) ||
+           SGP_TileIsSolid(level, tile_right, tile_bottom, SGP_OOB_HORIZONTAL_SOLID);
 }
 
 #endif // SGP_H
