@@ -23,7 +23,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  *
- * Version: v2.1.1
+ * Version: v2.1.1-pre4
  */
 #ifndef SGP_H
 #define SGP_H
