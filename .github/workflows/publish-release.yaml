@@ -22,23 +22,10 @@ jobs:
 
       - name: Create GitHub Release
         id: create_release
-        uses: actions/create-release@v1
+        run: |
+          gh release create ${{ steps.get_tag.outputs.tag }} \
+            --title "Release ${{ steps.get_tag.outputs.tag }}" \
+            --generate-notes \
+            ./sgp.h
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.get_tag.outputs.tag }}
-          release_name: Release ${{ steps.get_tag.outputs.tag }}
-          body: |
-            Automated release for ${{ steps.get_tag.outputs.tag }}.
-          draft: false
-          prerelease: false
-
-      - name: Upload sgp.h as release asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./sgp.h
-          asset_name: sgp.h
-          asset_content_type: text/plain
