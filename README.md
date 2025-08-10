@@ -1,4 +1,4 @@
-# Sega Genesis Platform Abstraction Layer (SGP) v2.1
+# Sega Genesis Platform Abstraction Layer (SGP) v2.1.1
 A lightweight, header-only abstraction layer for Sega Genesis/MegaDrive development using [SGDK](https://github.com/Stephane-D/SGDK). SGP provides helper functions for common usage patterns such as camera control, input handling, and basic collisions for Sega Genesis/MegaDrive development. Inspired by [raylib](https://github.com/raysan5/raylib).
 
 ## Features

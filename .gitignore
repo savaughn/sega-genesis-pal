@@ -1,1 +1,3 @@
 .DS_Store
+tests/*.test
+tests/*.test_debug

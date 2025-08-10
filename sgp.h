@@ -23,12 +23,14 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  *
- * Version: 2.1
+ * Version: 2.1.1
  */
 #ifndef SGP_H
 #define SGP_H
 
+#ifndef SGP_TEST_MODE
 #include <genesis.h>
+#endif
 
 #define BUTTON_NONE 0x0000
 #define VDP_SPRITE_OFFSET 0x80 // Offset for sprite coordinates in VDP
@@ -44,6 +46,9 @@
 #define SET_INACTIVE(flags, mask) ((flags) &= ~(mask))
 #define FLAG_IS_ACTIVE(flags, mask) (((flags) & (mask)) != 0)
 #define FLAG_IS_INACTIVE(flags, mask) (((flags) & (mask)) == 0)
+
+#define SGP_OOB_HORIZONTAL_SOLID true
+#define SGP_OOB_HORIZONTAL_PASSABLE false
 
 // Maximum number of player entities
 #define SGP_MAX_PLAYER_COUNT 2
@@ -458,163 +463,121 @@ static inline bool SGP_CheckBoxCollision(const SGPBox *a, const SGPBox *b)
             a->y < b->y + b->h &&
             a->y + a->h > b->y);
 }
+
+// Helpers for tile collision queries
+static inline u16 SGP_LevelTotalRows(const SGPLevelCollisionData *level)
+{
+    return (level->row_length == 0) ? 0 : (level->data_length / level->row_length);
+}
+
+// Axis-aware solidity check: control OOB behavior per axis
+static inline bool SGP_TileIsSolidXY(const SGPLevelCollisionData *level, s16 tile_x, s16 tile_y, bool oob_x_is_solid, bool oob_y_is_solid)
+{
+    const u16 row_len = level->row_length;
+    const u16 total_rows = SGP_LevelTotalRows(level);
+    if (tile_x < 0 || (u16)tile_x >= row_len)
+        return oob_x_is_solid;
+    if (tile_y < 0 || (u16)tile_y >= total_rows)
+        return oob_y_is_solid;
+
+    u32 idx = (u32)(u16)tile_y * (u32)row_len + (u32)(u16)tile_x;
+    if (idx >= level->data_length)
+        return oob_x_is_solid || oob_y_is_solid; // Safety
+    return level->collision_data[idx] == SOLID_TILE;
+}
+
+static inline bool SGP_TileIsSolid(const SGPLevelCollisionData *level, s16 tile_x, s16 tile_y, bool oob_is_solid)
+{
+    return SGP_TileIsSolidXY(level, tile_x, tile_y, oob_is_solid, oob_is_solid);
+}
+
 /**
- * Checks for player collision with the level tiles using look-ahead logic.
- * Returns true if a collision is detected in the specified direction.
+ * Checks for player collision against tiles using post-move collision.
+ * Call this AFTER adjusting position for the intended direction; if true, undo that axis move.
  */
 static inline bool SGP_PlayerLevelCollision(
-    u16 player_index, s16 player_x, s16 player_y, u16 player_width, u16 player_height,
+    u16 player_index, s16 player_coll_x, s16 player_coll_y, u16 player_coll_width, u16 player_coll_height,
     const SGPLevelCollisionData *level, SGPMovementDirection direction)
 {
-    s16 tile_x_left;
-    s16 tile_x_right;
-    s16 tile_y_top = player_y >> PIXELS_TO_TILE_SHIFT;
-    s16 tile_y_bottom = (player_y + player_height - 1) >> PIXELS_TO_TILE_SHIFT;
-
-    s16 arr_ind_top_left;
-    s16 arr_ind_top_right;
-    s16 arr_ind_bottom_left;
-    s16 arr_ind_bottom_right;
-
-    u16 type_top_left, type_top_right, type_bottom_left, type_bottom_right;
-
-    /**
-     * Support multiple players by storing previous collision flags and positions
-     * for each player index as static arrays.
-     */
+    // Per-player collision flags for early return when collision already detected and position unchanged
     static u16 prev_collide_flags[SGP_MAX_PLAYER_COUNT] = {0};
-    static u16 prev_player_x[SGP_MAX_PLAYER_COUNT] = {0};
-    static u16 prev_player_y[SGP_MAX_PLAYER_COUNT] = {0};
+    static s16 prev_x[SGP_MAX_PLAYER_COUNT] = {0};
+    static s16 prev_y[SGP_MAX_PLAYER_COUNT] = {0};
 
-    if (direction & SGP_DIR_UP) // UP
+    // Tile bounds of the player's rectangle (allow per-entity collision box insets)
+    const s16 col_left_px = (s16)(player_coll_x);
+    const s16 col_right_px = (s16)(player_coll_x + (s16)player_coll_width - 1);
+    const s16 col_top_px = (s16)(player_coll_y);
+    const s16 col_bottom_px = (s16)(player_coll_y + (s16)player_coll_height - 1);
+
+    const s16 tile_left = col_left_px >> PIXELS_TO_TILE_SHIFT;
+    const s16 tile_right = col_right_px >> PIXELS_TO_TILE_SHIFT;
+    const s16 tile_top = col_top_px >> PIXELS_TO_TILE_SHIFT;
+    const s16 tile_bottom = col_bottom_px >> PIXELS_TO_TILE_SHIFT;
+
+    if (direction & SGP_DIR_LEFT)
     {
-        SET_INACTIVE(prev_collide_flags[player_index], COLLIDE_DOWN);
-
-        // Only check vertical position for up
-        if (prev_player_y[player_index] == player_y && prev_player_x[player_index] == player_x && FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_UP))
+        // Only check if position changed or not already flagged
+        if (prev_x[player_index] == player_coll_x && prev_y[player_index] == player_coll_y && FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_LEFT))
             return true;
-
-        if ((player_y & COLLISION_TILE_SIZE_MASK) != 0)
-            return false;
-
-        tile_y_top = (player_y - 1) >> PIXELS_TO_TILE_SHIFT;
-        tile_x_left = (player_x + 1) >> PIXELS_TO_TILE_SHIFT;
-        arr_ind_top_left = tile_x_left + (tile_y_top * level->row_length);
-        if (arr_ind_top_left >= level->data_length) SGP_HandleError("Coll_arr index outofbounds top_left");
-        type_top_left = level->collision_data[arr_ind_top_left];
-
-        tile_x_right = ((player_x + player_width - 1) >> PIXELS_TO_TILE_SHIFT);
-        arr_ind_top_right = tile_x_right + (tile_y_top * level->row_length);
-        if (arr_ind_top_right >= level->data_length) SGP_HandleError("Coll_arr index outofbounds top_right");
-        type_top_right = level->collision_data[arr_ind_top_right];
-
-        prev_player_y[player_index] = player_y;
-        prev_player_x[player_index] = player_x;
-
-        if (type_top_left == SOLID_TILE || type_top_right == SOLID_TILE)
-            SET_ACTIVE(prev_collide_flags[player_index], COLLIDE_UP);
-        else
-            SET_INACTIVE(prev_collide_flags[player_index], COLLIDE_UP);
-
-        return FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_UP);
-    }
-    else if (direction & SGP_DIR_DOWN) // DOWN
-    {
-        SET_INACTIVE(prev_collide_flags[player_index], COLLIDE_UP);
-
-        if (((player_y + player_height) & COLLISION_TILE_SIZE_MASK) != 0)
-            return false;
-
-        // Only check vertical position for down
-        if (prev_player_y[player_index] == player_y && FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_DOWN))
-            return true;
-
-        tile_y_bottom = (player_y + player_height) >> PIXELS_TO_TILE_SHIFT;
-        tile_x_left = (player_x + 1) >> PIXELS_TO_TILE_SHIFT;
-        arr_ind_bottom_left = tile_x_left + (tile_y_bottom * level->row_length);
-        if (arr_ind_bottom_left >= level->data_length) SGP_HandleError("Coll_arr index outofbounds bottom_left");
-        type_bottom_left = level->collision_data[arr_ind_bottom_left];
-
-        tile_x_right = ((player_x + player_width - 1) >> PIXELS_TO_TILE_SHIFT);
-        arr_ind_bottom_right = tile_x_right + (tile_y_bottom * level->row_length);
-        if (arr_ind_bottom_right >= level->data_length) SGP_HandleError("Coll_arr index outofbounds bottom_right");
-        type_bottom_right = level->collision_data[arr_ind_bottom_right];
-
-        prev_player_y[player_index] = player_y;
-        prev_player_x[player_index] = player_x;
-
-        if (type_bottom_left == SOLID_TILE || type_bottom_right == SOLID_TILE)
-            SET_ACTIVE(prev_collide_flags[player_index], COLLIDE_DOWN);
-        else
-            SET_INACTIVE(prev_collide_flags[player_index], COLLIDE_DOWN);
-
-        return FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_DOWN);
-    }
-    else
-    {
-        SET_INACTIVE(prev_collide_flags[player_index], COLLIDE_DOWN | COLLIDE_UP);
-    }
-
-    if (direction & SGP_DIR_LEFT) // LEFT
-    {
-        SET_INACTIVE(prev_collide_flags[player_index], COLLIDE_RIGHT);
-
-        // Only check horizontal position for left
-        if (prev_player_x[player_index] == player_x && prev_player_y[player_index] == player_y && FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_LEFT))
-            return true;
-        if ((player_x & COLLISION_TILE_SIZE_MASK) != 0)
-            return false;
-
-        tile_x_left = (player_x - 1) >> PIXELS_TO_TILE_SHIFT;
-        arr_ind_top_left = tile_x_left + (tile_y_top * level->row_length);
-        if (arr_ind_top_left >= level->data_length) SGP_HandleError("Coll_arr index outofbounds top_left");
-        type_top_left = level->collision_data[arr_ind_top_left];
-
-        arr_ind_bottom_left = tile_x_left + (tile_y_bottom * level->row_length);
-        if (arr_ind_bottom_left >= level->data_length) SGP_HandleError("Coll_arr index outofbounds bottom_left");
-        type_bottom_left = level->collision_data[arr_ind_bottom_left];
-
-        prev_player_x[player_index] = player_x;
-        prev_player_y[player_index] = player_y;
-
-        if (type_top_left == SOLID_TILE || type_bottom_left == SOLID_TILE)
+        bool isColliding = SGP_TileIsSolidXY(level, tile_left, tile_top, SGP_OOB_HORIZONTAL_SOLID, SGP_OOB_HORIZONTAL_PASSABLE) ||
+                           SGP_TileIsSolidXY(level, tile_left, tile_bottom, SGP_OOB_HORIZONTAL_SOLID, SGP_OOB_HORIZONTAL_PASSABLE);
+        prev_x[player_index] = player_coll_x;
+        prev_y[player_index] = player_coll_y;
+        if (isColliding)
             SET_ACTIVE(prev_collide_flags[player_index], COLLIDE_LEFT);
         else
             SET_INACTIVE(prev_collide_flags[player_index], COLLIDE_LEFT);
-
-        return FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_LEFT);
+        return isColliding;
     }
-    else if (direction & SGP_DIR_RIGHT) // RIGHT
+    else if (direction & SGP_DIR_RIGHT)
     {
-        SET_INACTIVE(prev_collide_flags[player_index], COLLIDE_LEFT);
-
-        // Only check horizontal position for right
-        if (prev_player_x[player_index] == player_x && prev_player_y[player_index] == player_y && FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_RIGHT))
+        if (prev_x[player_index] == player_coll_x && prev_y[player_index] == player_coll_y && FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_RIGHT))
             return true;
-        if (((player_x + player_width) & COLLISION_TILE_SIZE_MASK) != 0)
-            return false;
-
-        tile_x_right = (player_x + player_width) >> PIXELS_TO_TILE_SHIFT;
-        arr_ind_top_right = tile_x_right + (tile_y_top * level->row_length);
-        arr_ind_bottom_right = tile_x_right + (tile_y_bottom * level->row_length);
-        type_top_right = level->collision_data[arr_ind_top_right];
-        type_bottom_right = level->collision_data[arr_ind_bottom_right];
-
-        prev_player_x[player_index] = player_x;
-        prev_player_y[player_index] = player_y;
-
-        if (type_top_right == SOLID_TILE || type_bottom_right == SOLID_TILE)
+        bool isColliding = SGP_TileIsSolidXY(level, tile_right, tile_top, SGP_OOB_HORIZONTAL_SOLID, SGP_OOB_HORIZONTAL_PASSABLE) ||
+                           SGP_TileIsSolidXY(level, tile_right, tile_bottom, SGP_OOB_HORIZONTAL_SOLID, SGP_OOB_HORIZONTAL_PASSABLE);
+        prev_x[player_index] = player_coll_x;
+        prev_y[player_index] = player_coll_y;
+        if (isColliding)
             SET_ACTIVE(prev_collide_flags[player_index], COLLIDE_RIGHT);
         else
             SET_INACTIVE(prev_collide_flags[player_index], COLLIDE_RIGHT);
+        return isColliding;
+    }
 
-        return FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_RIGHT);
-    }
-    else
+    if (direction & SGP_DIR_UP)
     {
-        SET_INACTIVE(prev_collide_flags[player_index], COLLIDE_LEFT | COLLIDE_RIGHT);
+        if (prev_x[player_index] == player_coll_x && prev_y[player_index] == player_coll_y && FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_UP))
+            return true;
+        bool isColliding = SGP_TileIsSolidXY(level, tile_left, tile_top, SGP_OOB_HORIZONTAL_SOLID, SGP_OOB_HORIZONTAL_SOLID) ||
+                           SGP_TileIsSolidXY(level, tile_right, tile_top, SGP_OOB_HORIZONTAL_SOLID, SGP_OOB_HORIZONTAL_SOLID);
+        prev_x[player_index] = player_coll_x;
+        prev_y[player_index] = player_coll_y;
+        if (isColliding)
+            SET_ACTIVE(prev_collide_flags[player_index], COLLIDE_UP);
+        else
+            SET_INACTIVE(prev_collide_flags[player_index], COLLIDE_UP);
+        return isColliding;
     }
-    return false; // No collision detected
+    else if (direction & SGP_DIR_DOWN)
+    {
+        if (prev_x[player_index] == player_coll_x && prev_y[player_index] == player_coll_y && FLAG_IS_ACTIVE(prev_collide_flags[player_index], COLLIDE_DOWN))
+            return true;
+        bool isColliding = SGP_TileIsSolidXY(level, tile_left, tile_bottom, SGP_OOB_HORIZONTAL_SOLID, SGP_OOB_HORIZONTAL_SOLID) ||
+                           SGP_TileIsSolidXY(level, tile_right, tile_bottom, SGP_OOB_HORIZONTAL_SOLID, SGP_OOB_HORIZONTAL_SOLID);
+        prev_x[player_index] = player_coll_x;
+        prev_y[player_index] = player_coll_y;
+        if (isColliding)
+            SET_ACTIVE(prev_collide_flags[player_index], COLLIDE_DOWN);
+        else
+            SET_INACTIVE(prev_collide_flags[player_index], COLLIDE_DOWN);
+        return isColliding;
+    }
+    // Fallback: general rectangle-solid overlap (treat OOB as solid)
+    return SGP_TileIsSolid(level, tile_left, tile_top, SGP_OOB_HORIZONTAL_SOLID) ||
+           SGP_TileIsSolid(level, tile_right, tile_top, SGP_OOB_HORIZONTAL_SOLID) ||
+           SGP_TileIsSolid(level, tile_left, tile_bottom, SGP_OOB_HORIZONTAL_SOLID) ||
+           SGP_TileIsSolid(level, tile_right, tile_bottom, SGP_OOB_HORIZONTAL_SOLID);
 }
 
 #endif // SGP_H
