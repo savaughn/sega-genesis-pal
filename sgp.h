@@ -272,8 +272,8 @@ static inline bool SGP_ButtonDown(u16 joy, u16 button)
 typedef struct
 {
     Sprite *sprite;      // Sprite to follow
-    s32 offset_x; // Target camera X position (integer)
-    s32 offset_y; // Target camera Y position (integer)
+    s32 offset_x;        // Offset from sprite X position (integer)
+    s32 offset_y;        // Offset from sprite Y position (integer)
     s32 sprite_world_x; // Sprite's world X position (integer)
     s32 sprite_world_y; // Sprite's world Y position (integer)
 } SGPCameraTarget;
