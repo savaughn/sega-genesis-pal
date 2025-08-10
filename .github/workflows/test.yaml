@@ -1,0 +1,38 @@
+name: Run Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc build-essential
+
+      - name: Run syntax checks
+        working-directory: tests
+        run: make syntax
+
+      - name: Run all tests
+        working-directory: tests
+        run: make all_tests
+
+      - name: Run debug mode tests
+        working-directory: tests
+        run: |
+          make test_debug
+          make collision_debug
+          make input_debug
