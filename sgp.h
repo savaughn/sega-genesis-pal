@@ -96,16 +96,10 @@ typedef struct
  */
 typedef struct
 {
-    fix16 offset_x;  // Camera offset X
-    fix32 offset_y;  // Camera offset Y
-    fix32 *target_x; // Camera target X
-    fix32 *target_y; // Camera target Y
     u8 type;         // Camera type (e.g. CAMERA_SMOOTH)
     u32 current_x;   // Camera X position (integer for MAP_scrollTo)
     u32 current_y;   // Camera Y position (integer for MAP_scrollTo)
     Sprite *sprite;
-    u16 sprite_width;  // Width of the sprite being followed
-    u16 sprite_height; // Height of the sprite being followed
     bool active;
     Map *map; // Pointer to the current map being viewed
     u16 map_height;
@@ -166,10 +160,6 @@ static inline void SGP_init(void)
     sgp.input.joy2_state = 0;
     sgp.input.joy1_previous = 0;
     sgp.input.joy2_previous = 0;
-    sgp.camera.offset_x = 0;
-    sgp.camera.offset_y = 0;
-    sgp.camera.target_x = 0;
-    sgp.camera.target_y = 0;
     sgp.camera.current_x = 0;
     sgp.camera.current_y = 0;
     sgp.camera.active = false;
@@ -282,10 +272,10 @@ static inline bool SGP_ButtonDown(u16 joy, u16 button)
 typedef struct
 {
     Sprite *sprite;      // Sprite to follow
-    fix32 *target_x_ptr; // Target X position (fixed-point)
-    fix32 *target_y_ptr; // Target Y Position (fixed-point)
-    u16 sprite_width;    // Width of the sprite being followed
-    u16 sprite_height;   // Height of the sprite being followed
+    s32 offset_x;        // Offset from sprite X position (integer)
+    s32 offset_y;        // Offset from sprite Y position (integer)
+    s32 sprite_world_x; // Sprite's world X position (integer)
+    s32 sprite_world_y; // Sprite's world Y position (integer)
 } SGPCameraTarget;
 
 /**
@@ -294,13 +284,17 @@ typedef struct
  * @param current_x   Target X position
  * @param current_y   Target Y position
  */
-static inline u16 SGP_CameraInit(Map *map)
+static inline bool SGP_CameraInit(Map *map)
 {
+    if (map == NULL) {
+        return false;
+    }
+    
     sgp.camera.map = map;
     sgp.camera.map_height = SGP_MetatilesToPixels(map->h);
     sgp.camera.map_width = SGP_MetatilesToPixels(map->w);
     sgp.camera.active = true;
-    return sgp.camera.map != NULL;
+    return true;
 }
 /**
  * @brief Clamps the given fixed-point position to the map bounds.
@@ -335,12 +329,10 @@ static inline void SGP_CameraFollowTarget(SGPCameraTarget *target)
     {
         return; // Camera not active, skip following
     }
-    s32 target_x_map = F32_toInt(*target->target_x_ptr);
-    s32 target_y_map = F32_toInt(*target->target_y_ptr);
 
-    // Center camera on target, but clamp camera to map bounds
-    s16 new_camera_x = target_x_map - (screenWidth / 2) + (target->sprite_width / 2);
-    s16 new_camera_y = target_y_map - (screenHeight / 2) + (target->sprite_height / 2);
+    // Use target position directly as camera position, clamp to map bounds
+    s16 new_camera_x = target->sprite_world_x - target->offset_x;
+    s16 new_camera_y = target->sprite_world_y - target->offset_y;
 
     if (new_camera_x < 0)
         new_camera_x = 0;
@@ -373,8 +365,8 @@ static inline void SGP_CameraFollowTarget(SGPCameraTarget *target)
     if (target->sprite)
     {
         SPR_setPosition(target->sprite,
-                        target_x_map - new_camera_x,
-                        target_y_map - new_camera_y);
+                        target->sprite_world_x - new_camera_x,
+                        target->sprite_world_y - new_camera_y);
     }
 }
 

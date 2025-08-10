@@ -7,6 +7,7 @@ This directory contains tests for the SGP (Sega Genesis Platform) header-only li
 - **`smoke_test.c`** - Basic smoke test that validates SGP compiles and functions work
 - **`collision_test.c`** - Comprehensive collision detection test suite
 - **`input_test.c`** - Comprehensive input function test suite
+- **`camera_test.c`** - Camera system test suite for following, centering, and map bounds
 - **`sgp_test.h`** - Test wrapper header with mock SGDK dependencies
 - **`Makefile`** - Build system for tests
 
@@ -18,10 +19,12 @@ cd tests/
 make test          # Run basic smoke test
 make collision     # Run collision detection test
 make input         # Run input function test
-make all_tests     # Run all tests (smoke, collision, and input)
+make camera        # Run camera system test
+make all_tests     # Run all tests (smoke, collision, input, and camera)
 make test_debug    # Run smoke test with DEBUG mode enabled
 make collision_debug # Run collision test with DEBUG mode enabled
 make input_debug   # Run input test with DEBUG mode enabled
+make camera_debug  # Run camera test with DEBUG mode enabled
 ```
 
 ### Available Targets
@@ -29,10 +32,12 @@ make input_debug   # Run input test with DEBUG mode enabled
 - `make test` - Build and run smoke test
 - `make collision` - Build and run collision test
 - `make input` - Build and run input test
+- `make camera` - Build and run camera test
 - `make test_debug` - Build and run smoke test with DEBUG mode
 - `make collision_debug` - Build and run collision test with DEBUG mode
 - `make input_debug` - Build and run input test with DEBUG mode
-- `make all_tests` - Run all tests (smoke, collision, and input)
+- `make camera_debug` - Build and run camera test with DEBUG mode
+- `make all_tests` - Run all tests (smoke, collision, input, and camera)
 - `make syntax` - Check syntax for all tests (no execution)
 - `make clean` - Remove build artifacts
 - `make help` - Show all available targets
@@ -78,6 +83,18 @@ The collision test validates:
 - ✅ **Multi-Player Support** - Separate collision state for multiple players
 - ✅ **Collision Caching** - Position-based caching and proper cache invalidation
 - ✅ **Axis-Specific Sampling** - Center-row sampling for horizontal movement
+
+### Camera Test (`camera_test.c`)
+
+The camera test validates:
+
+- ✅ **Camera Initialization** - `SGP_CameraInit()` sets up map bounds correctly
+- ✅ **Camera Following** - `SGP_CameraFollowTarget()` follows sprite positions
+- ✅ **Camera Centering** - Proper centering calculation with offset values
+- ✅ **Map Bounds Clamping** - Camera position clamped to map boundaries
+- ✅ **Sprite Positioning** - Sprite screen position calculated relative to camera
+- ✅ **Camera State Management** - Activate/deactivate camera functionality
+- ✅ **Direct Camera Updates** - Manual camera position updates when inactive
 
 ### Expected Output
 
@@ -136,6 +153,26 @@ Tests failed: 0
 Success rate: 100.0%
 
 ✓ All tests passed!
+```
+
+**Camera Test:**
+```
+=== SGP Camera System Test Suite ===
+
+Testing camera initialization... PASS
+Testing camera following with centering... PASS
+Testing map bounds clamping (far right/bottom)... PASS
+Testing map bounds clamping (origin 0,0)... PASS
+Testing camera deactivation and direct updates... PASS
+
+=== Test Summary ===
+Tests run: 5
+Tests passed: 5
+Tests failed: 0
+Success rate: 100.0%
+
+✓ All camera tests passed!
+Camera system functions correctly with proper bounds checking.
 ```
 
 ## Adding New Tests
